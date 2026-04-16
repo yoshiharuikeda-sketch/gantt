@@ -1,9 +1,10 @@
 'use client'
 
-import { useRef, useEffect, useMemo, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { useRef, useEffect, useMemo, useState, useCallback } from 'react'
+import { Plus, SlidersHorizontal, X } from 'lucide-react'
 import { useTaskStore } from '@/store/taskStore'
 import { useUIStore } from '@/store/uiStore'
+import type { GanttColKey } from '@/store/uiStore'
 import { useProjectStore } from '@/store/projectStore'
 import AddTaskModal from './AddTaskModal'
 import TaskContextMenu from './TaskContextMenu'
@@ -24,19 +25,61 @@ import {
   startOfWeek,
   startOfMonth,
 } from '@/lib/utils/dateUtils'
+import type { Task } from '@/types'
 
 const ROW_HEIGHT = 36
 const HEADER_HEIGHT = 56
-const LEFT_PANEL_WIDTH = 280
+
+// Column definitions
+interface ColDef {
+  label: string
+  width: number
+  removable: boolean
+}
+
+const COL_DEFS: Record<GanttColKey, ColDef> = {
+  name:       { label: 'タスク名', width: 180, removable: false },
+  start_date: { label: '開始日',   width: 90,  removable: true  },
+  end_date:   { label: '終了日',   width: 90,  removable: true  },
+  progress:   { label: '進捗率',   width: 80,  removable: true  },
+  updated_at: { label: '更新日',   width: 100, removable: true  },
+}
+
+const ALL_COL_KEYS: GanttColKey[] = ['name', 'start_date', 'end_date', 'progress', 'updated_at']
+
+// Helper: format date as YYYY/MM/DD
+function fmtDate(val: string | null | undefined): string {
+  if (!val) return '-'
+  try {
+    return format(new Date(val), 'yyyy/MM/dd')
+  } catch {
+    return '-'
+  }
+}
+
+// API patch function
+async function patchTask(id: string, updates: Partial<Task>): Promise<Task> {
+  const res = await fetch('/api/tasks', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, ...updates }),
+  })
+  if (!res.ok) throw new Error('Failed to patch task')
+  return res.json()
+}
 
 export default function GanttChart() {
-  const { tasks, phases } = useTaskStore()
-  const { zoomLevel } = useUIStore()
+  const { tasks, phases, updateTask } = useTaskStore()
+  const { zoomLevel, ganttColumns, setGanttColumns } = useUIStore()
   const { currentProject, currentUserRole } = useProjectStore()
   const scrollRef = useRef<HTMLDivElement>(null)
   const leftScrollRef = useRef<HTMLDivElement>(null)
+  const colMenuRef = useRef<HTMLDivElement>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ task: typeof tasks[0]; x: number; y: number } | null>(null)
+  const [editing, setEditing] = useState<{ taskId: string; field: GanttColKey } | null>(null)
+  const [editValue, setEditValue] = useState<string>('')
+  const [showColMenu, setShowColMenu] = useState(false)
 
   const canEdit = currentUserRole === 'owner' || currentUserRole === 'editor'
 
@@ -50,6 +93,12 @@ export default function GanttChart() {
     timelineStart,
     dayWidth,
     canEdit
+  )
+
+  // Left panel width = sum of visible column widths
+  const leftPanelWidth = useMemo(
+    () => ganttColumns.reduce((sum, key) => sum + COL_DEFS[key].width, 0),
+    [ganttColumns]
   )
 
   // Attach global mouse events for drag
@@ -92,6 +141,18 @@ export default function GanttChart() {
     const centerOffset = scrollRef.current.clientWidth / 2
     scrollRef.current.scrollLeft = Math.max(0, todayX - centerOffset)
   }, [timelineStart, dayWidth])
+
+  // Close column menu on outside click
+  useEffect(() => {
+    if (!showColMenu) return
+    const handler = (e: MouseEvent) => {
+      if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) {
+        setShowColMenu(false)
+      }
+    }
+    window.addEventListener('mousedown', handler)
+    return () => window.removeEventListener('mousedown', handler)
+  }, [showColMenu])
 
   // Build column headers
   const columns = useMemo(() => {
@@ -172,6 +233,78 @@ export default function GanttChart() {
     blocked: '#ef4444',
   }
 
+  // Start inline editing
+  const startEdit = useCallback((taskId: string, field: GanttColKey, currentVal: string) => {
+    if (!canEdit) return
+    if (field === 'updated_at') return
+    setEditing({ taskId, field })
+    setEditValue(currentVal)
+  }, [canEdit])
+
+  // Commit inline edit
+  const commitEdit = useCallback(async () => {
+    if (!editing) return
+    const { taskId, field } = editing
+    setEditing(null)
+
+    let updates: Partial<Task> = {}
+    if (field === 'name') {
+      updates = { name: editValue }
+    } else if (field === 'start_date') {
+      updates = { start_date: editValue || null }
+    } else if (field === 'end_date') {
+      updates = { end_date: editValue || null }
+    } else if (field === 'progress') {
+      const num = parseInt(editValue, 10)
+      if (!isNaN(num)) updates = { progress: Math.min(100, Math.max(0, num)) }
+    }
+
+    if (Object.keys(updates).length === 0) return
+
+    // Optimistic update
+    updateTask(taskId, updates)
+
+    try {
+      await patchTask(taskId, updates)
+    } catch (err) {
+      console.error('Failed to save task:', err)
+    }
+  }, [editing, editValue, updateTask])
+
+  // Get display value for a cell
+  const getCellValue = (task: Task, field: GanttColKey): string => {
+    switch (field) {
+      case 'name':       return task.name
+      case 'start_date': return fmtDate(task.start_date)
+      case 'end_date':   return fmtDate(task.end_date)
+      case 'progress':   return `${task.progress}%`
+      case 'updated_at': return fmtDate(task.updated_at)
+      default:           return ''
+    }
+  }
+
+  // Get raw edit value for a cell
+  const getRawValue = (task: Task, field: GanttColKey): string => {
+    switch (field) {
+      case 'name':       return task.name
+      case 'start_date': return task.start_date ?? ''
+      case 'end_date':   return task.end_date ?? ''
+      case 'progress':   return String(task.progress)
+      default:           return ''
+    }
+  }
+
+  const toggleColumn = (key: GanttColKey) => {
+    if (key === 'name') return // always shown
+    if (ganttColumns.includes(key)) {
+      setGanttColumns(ganttColumns.filter((c) => c !== key))
+    } else {
+      // Insert in original order
+      const newCols = ALL_COL_KEYS.filter((k) => k === key || ganttColumns.includes(k))
+      setGanttColumns(newCols)
+    }
+  }
+
   if (!currentProject) return null
 
   if (tasks.length === 0) {
@@ -198,26 +331,86 @@ export default function GanttChart() {
   return (
     <>
     <div className="h-full flex overflow-hidden select-none">
-      {/* Left panel: task names */}
+      {/* Left panel: multi-column */}
       <div
         className="flex-shrink-0 border-r border-gray-200 flex flex-col bg-white z-10"
-        style={{ width: LEFT_PANEL_WIDTH }}
+        style={{ width: leftPanelWidth }}
       >
-        {/* Header */}
+        {/* Header row */}
         <div
-          className="border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0 bg-gray-50"
+          className="border-b border-gray-200 flex items-center flex-shrink-0 bg-gray-50 relative"
           style={{ height: HEADER_HEIGHT }}
         >
-          <span className="text-xs font-medium text-gray-500">タスク名</span>
-          {canEdit && (
+          {ganttColumns.map((key) => {
+            const def = COL_DEFS[key]
+            return (
+              <div
+                key={key}
+                className="flex items-center justify-between px-2 border-r border-gray-200 flex-shrink-0 group"
+                style={{ width: def.width, height: '100%' }}
+              >
+                <span className="text-xs font-medium text-gray-500 truncate">{def.label}</span>
+                {def.removable && (
+                  <button
+                    onClick={() => toggleColumn(key)}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-200 transition-opacity"
+                    title={`${def.label}を非表示`}
+                  >
+                    <X className="w-3 h-3 text-gray-400" />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+
+          {/* Column picker button */}
+          <div ref={colMenuRef} className="absolute right-0 top-0 bottom-0 flex items-center pr-1">
             <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-              title="タスク/フェーズを追加"
+              onClick={() => setShowColMenu((v) => !v)}
+              className="p-1 rounded hover:bg-gray-200 transition-colors"
+              title="カラム表示設定"
             >
-              <Plus className="w-3.5 h-3.5" />
-              追加
+              <SlidersHorizontal className="w-3.5 h-3.5 text-gray-500" />
             </button>
+
+            {showColMenu && (
+              <div className="absolute top-full right-0 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+                <p className="text-xs font-medium text-gray-500 px-3 py-1 border-b border-gray-100">表示カラム</p>
+                {ALL_COL_KEYS.map((key) => {
+                  const def = COL_DEFS[key]
+                  const checked = ganttColumns.includes(key)
+                  return (
+                    <label
+                      key={key}
+                      className={`flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-50 ${key === 'name' ? 'opacity-50' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={key === 'name'}
+                        onChange={() => toggleColumn(key)}
+                        className="w-3 h-3 accent-blue-600"
+                      />
+                      <span className="text-gray-700">{def.label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Add button */}
+          {canEdit && (
+            <div className="absolute left-2 bottom-1">
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-1 px-2 py-0.5 text-xs text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                title="タスク/フェーズを追加"
+              >
+                <Plus className="w-3 h-3" />
+                追加
+              </button>
+            </div>
           )}
         </div>
 
@@ -232,16 +425,19 @@ export default function GanttChart() {
               return (
                 <div
                   key={`phase-${row.phase.id}-${i}`}
-                  className="flex items-center gap-2 px-4 bg-gray-50 border-b border-gray-100"
-                  style={{ height: ROW_HEIGHT }}
+                  className="flex items-center bg-gray-50 border-b border-gray-100"
+                  style={{ height: ROW_HEIGHT, width: leftPanelWidth }}
                 >
-                  <div
-                    className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                    style={{ backgroundColor: row.phase.color }}
-                  />
-                  <span className="text-xs font-semibold text-gray-700 truncate">
-                    {row.phase.name}
-                  </span>
+                  {/* Phase row spans all columns */}
+                  <div className="flex items-center gap-2 px-4" style={{ width: leftPanelWidth }}>
+                    <div
+                      className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                      style={{ backgroundColor: row.phase.color }}
+                    />
+                    <span className="text-xs font-semibold text-gray-700 truncate">
+                      {row.phase.name}
+                    </span>
+                  </div>
                 </div>
               )
             }
@@ -250,18 +446,63 @@ export default function GanttChart() {
             return (
               <div
                 key={`task-${task.id}`}
-                className="flex items-center gap-2 px-4 pl-8 border-b border-gray-100 hover:bg-blue-50 transition-colors cursor-pointer"
+                className="flex items-center border-b border-gray-100 hover:bg-blue-50 transition-colors"
                 style={{ height: ROW_HEIGHT }}
                 onContextMenu={(e) => {
                   e.preventDefault()
                   setContextMenu({ task, x: e.clientX, y: e.clientY })
                 }}
               >
-                <div
-                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: phaseColor }}
-                />
-                <span className="text-xs text-gray-700 truncate">{task.name}</span>
+                {ganttColumns.map((key, colIdx) => {
+                  const def = COL_DEFS[key]
+                  const isEditing = editing?.taskId === task.id && editing?.field === key
+                  const isEditable = canEdit && key !== 'updated_at'
+
+                  return (
+                    <div
+                      key={key}
+                      className={`flex-shrink-0 flex items-center border-r border-gray-100 overflow-hidden ${
+                        colIdx === 0 ? 'pl-8' : 'px-2'
+                      } ${isEditable ? 'cursor-text' : ''}`}
+                      style={{ width: def.width, height: '100%' }}
+                      onClick={() => {
+                        if (isEditable) {
+                          startEdit(task.id, key, getRawValue(task, key))
+                        }
+                      }}
+                    >
+                      {isEditing ? (
+                        <input
+                          autoFocus
+                          type={key === 'progress' ? 'number' : 'text'}
+                          min={key === 'progress' ? 0 : undefined}
+                          max={key === 'progress' ? 100 : undefined}
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onBlur={commitEdit}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitEdit()
+                            if (e.key === 'Escape') setEditing(null)
+                          }}
+                          className="w-full text-xs bg-white border border-blue-400 rounded px-1 outline-none"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <>
+                          {colIdx === 0 && (
+                            <div
+                              className="w-1.5 h-1.5 rounded-full flex-shrink-0 mr-2"
+                              style={{ backgroundColor: phaseColor }}
+                            />
+                          )}
+                          <span className="text-xs text-gray-700 truncate">
+                            {getCellValue(task, key)}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )
           })}

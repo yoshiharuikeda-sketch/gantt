@@ -4,9 +4,15 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, LogOut, User, CheckCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import type { Profile } from '@/types'
+import type { Profile, UpdateRequest } from '@/types'
 import { useNotificationStore } from '@/store/notificationStore'
 import { formatDateTime } from '@/lib/utils/dateUtils'
+import ResponseForm from '@/components/update-request/ResponseForm'
+import ApprovalPanel from '@/components/update-request/ApprovalPanel'
+
+type RequestWithTask = UpdateRequest & {
+  tasks?: { name: string; start_date: string | null; end_date: string | null; progress: number; status: string }
+}
 
 interface HeaderProps {
   profile: Profile | null
@@ -17,6 +23,8 @@ export default function Header({ profile }: HeaderProps) {
   const { notifications, unreadCount, setNotifications, markAsRead } = useNotificationStore()
   const [bellOpen, setBellOpen] = useState(false)
   const bellRef = useRef<HTMLDivElement>(null)
+  const [activeRequest, setActiveRequest] = useState<RequestWithTask | null>(null)
+  const [modalType, setModalType] = useState<'response' | 'approval' | null>(null)
 
   // Fetch notifications on mount
   useEffect(() => {
@@ -56,6 +64,26 @@ export default function Header({ profile }: HeaderProps) {
     })
   }
 
+  const handleNotificationClick = async (n: { id: string; type: string; is_read: boolean; data?: unknown }) => {
+    if (!n.is_read) handleMarkRead(n.id)
+    setBellOpen(false)
+
+    const data = n.data as { update_request_id?: string } | null
+    if (!data?.update_request_id) return
+
+    if (n.type === 'update_request' || n.type === 'update_submitted') {
+      try {
+        const res = await fetch(`/api/update-requests/detail?id=${data.update_request_id}`)
+        if (!res.ok) return
+        const req: RequestWithTask = await res.json()
+        setActiveRequest(req)
+        setModalType(n.type === 'update_request' ? 'response' : 'approval')
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   const handleSignOut = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
@@ -64,6 +92,7 @@ export default function Header({ profile }: HeaderProps) {
   }
 
   return (
+    <>
     <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0">
       <div />
       <div className="flex items-center gap-3">
@@ -105,7 +134,7 @@ export default function Header({ profile }: HeaderProps) {
                   notifications.map((n) => (
                     <button
                       key={n.id}
-                      onClick={() => handleMarkRead(n.id)}
+                      onClick={() => handleNotificationClick(n)}
                       className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${
                         !n.is_read ? 'bg-blue-50/50' : ''
                       }`}
@@ -154,5 +183,21 @@ export default function Header({ profile }: HeaderProps) {
         </div>
       </div>
     </header>
+
+      {modalType === 'response' && activeRequest && (
+        <ResponseForm
+          request={activeRequest}
+          onClose={() => { setActiveRequest(null); setModalType(null) }}
+          onSuccess={() => { setActiveRequest(null); setModalType(null) }}
+        />
+      )}
+      {modalType === 'approval' && activeRequest && (
+        <ApprovalPanel
+          request={activeRequest}
+          onClose={() => { setActiveRequest(null); setModalType(null) }}
+          onSuccess={() => { setActiveRequest(null); setModalType(null) }}
+        />
+      )}
+    </>
   )
 }

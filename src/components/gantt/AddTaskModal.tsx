@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Plus } from 'lucide-react'
 import { useTaskStore } from '@/store/taskStore'
 import { useProjectStore } from '@/store/projectStore'
@@ -16,7 +17,7 @@ const PHASE_COLORS = [
 ]
 
 export default function AddTaskModal({ onClose }: AddTaskModalProps) {
-  const { tasks, phases, upsertTask, setPhases } = useTaskStore()
+  const { phases, upsertTask, upsertPhase } = useTaskStore()
   const { currentProject } = useProjectStore()
 
   const [tab, setTab] = useState<'task' | 'phase'>('task')
@@ -98,7 +99,7 @@ export default function AddTaskModal({ onClose }: AddTaskModalProps) {
       }
 
       const phase: Phase = await res.json()
-      setPhases([...phases, phase])
+      upsertPhase(phase)
       onClose()
     } catch (e) {
       setError((e as Error).message)
@@ -107,7 +108,7 @@ export default function AddTaskModal({ onClose }: AddTaskModalProps) {
     }
   }
 
-  return (
+  const modal = (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
         {/* Header */}
@@ -310,4 +311,6 @@ export default function AddTaskModal({ onClose }: AddTaskModalProps) {
       </div>
     </div>
   )
+
+  return createPortal(modal, document.body)
 }

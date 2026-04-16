@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getProjectMembers, updateMemberRole, removeMember } from '@/lib/repositories/projectRepository'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getProjectMembers } from '@/lib/repositories/projectRepository'
 
 // GET /api/members?projectId=xxx
 export async function GET(req: NextRequest) {
@@ -35,10 +36,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'project_id, email, and role are required' }, { status: 400 })
     }
 
+    const admin = createAdminClient()
+
     // Only owner/editor can invite
-    const { data: member } = await supabase
+    const { data: member } = await admin
       .from('project_members')
-      .select('*')
+      .select('role')
       .eq('project_id', project_id)
       .eq('user_id', user.id)
       .single()
@@ -47,16 +50,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Call the RPC function defined in migration 003
-    const { data, error } = await supabase.rpc('invite_member', {
-      p_project_id: project_id,
-      p_email: email,
-      p_role: role,
-    })
+    // Look up user by email via profiles
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .single()
 
-    if (error) throw new Error(error.message)
+    if (!profile) {
+      return NextResponse.json({ error: 'ユーザーが見つかりません' }, { status: 404 })
+    }
 
-    return NextResponse.json(data, { status: 201 })
+    // Check if already a member
+    const { data: existing } = await admin
+      .from('project_members')
+      .select('id')
+      .eq('project_id', project_id)
+      .eq('user_id', profile.id)
+      .single()
+
+    if (existing) {
+      return NextResponse.json({ error: 'すでにメンバーです' }, { status: 409 })
+    }
+
+    const { data: newMember, error: insertError } = await admin
+      .from('project_members')
+      .insert({
+        project_id,
+        user_id: profile.id,
+        role,
+        invited_by: user.id,
+      })
+      .select()
+      .single()
+
+    if (insertError) throw new Error(insertError.message)
+
+    return NextResponse.json(newMember, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
@@ -76,9 +106,11 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'project_id, user_id, and role are required' }, { status: 400 })
     }
 
-    const { data: member } = await supabase
+    const admin = createAdminClient()
+
+    const { data: member } = await admin
       .from('project_members')
-      .select('*')
+      .select('role')
       .eq('project_id', project_id)
       .eq('user_id', user.id)
       .single()
@@ -87,7 +119,14 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden - only owner can change roles' }, { status: 403 })
     }
 
-    await updateMemberRole(project_id, user_id, role)
+    const { error } = await admin
+      .from('project_members')
+      .update({ role })
+      .eq('project_id', project_id)
+      .eq('user_id', user_id)
+
+    if (error) throw new Error(error.message)
+
     return NextResponse.json({ success: true })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
@@ -108,9 +147,11 @@ export async function DELETE(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { data: member } = await supabase
+    const admin = createAdminClient()
+
+    const { data: member } = await admin
       .from('project_members')
-      .select('*')
+      .select('role')
       .eq('project_id', projectId)
       .eq('user_id', user.id)
       .single()
@@ -120,7 +161,14 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    await removeMember(projectId, targetUserId)
+    const { error } = await admin
+      .from('project_members')
+      .delete()
+      .eq('project_id', projectId)
+      .eq('user_id', targetUserId)
+
+    if (error) throw new Error(error.message)
+
     return new NextResponse(null, { status: 204 })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })

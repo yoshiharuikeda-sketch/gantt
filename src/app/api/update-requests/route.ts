@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 // GET /api/update-requests?projectId=xxx&status=pending
 export async function GET(req: NextRequest) {
@@ -15,7 +16,9 @@ export async function GET(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    let query = supabase
+    const admin = createAdminClient()
+
+    let query = admin
       .from('update_requests')
       .select('*, tasks(name, start_date, end_date, progress, status)')
       .eq('project_id', projectId)
@@ -47,8 +50,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'task_id and request_type are required' }, { status: 400 })
     }
 
+    const admin = createAdminClient()
+
     // Get task to find assignee and project
-    const { data: task } = await supabase
+    const { data: task } = await admin
       .from('tasks')
       .select('project_id, assignee_id')
       .eq('id', task_id)
@@ -60,9 +65,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify requester is a member (owner/editor)
-    const { data: member } = await supabase
+    const { data: member } = await admin
       .from('project_members')
-      .select('*')
+      .select('role')
       .eq('project_id', task.project_id)
       .eq('user_id', user.id)
       .single()
@@ -71,7 +76,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await admin
       .from('update_requests')
       .insert({
         task_id,
@@ -90,7 +95,7 @@ export async function POST(req: NextRequest) {
     if (error) throw new Error(error.message)
 
     // Insert notification for assignee
-    await supabase.from('notifications').insert({
+    await admin.from('notifications').insert({
       user_id: task.assignee_id,
       type: 'update_request',
       title: '更新依頼が届いています',
@@ -120,7 +125,9 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'id and action are required' }, { status: 400 })
     }
 
-    const { data: request } = await supabase
+    const admin = createAdminClient()
+
+    const { data: request } = await admin
       .from('update_requests')
       .select('*')
       .eq('id', id)
@@ -137,7 +144,7 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'Request is not in pending state' }, { status: 400 })
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await admin
         .from('update_requests')
         .update({
           status: 'submitted',
@@ -151,7 +158,7 @@ export async function PATCH(req: NextRequest) {
       if (error) throw new Error(error.message)
 
       // Notify approver
-      await supabase.from('notifications').insert({
+      await admin.from('notifications').insert({
         user_id: request.approver_id,
         type: 'update_submitted',
         title: '更新回答が届いています',
@@ -166,9 +173,9 @@ export async function PATCH(req: NextRequest) {
       // Approver decides
       if (user.id !== request.approver_id) {
         // Also allow project owner to approve
-        const { data: member } = await supabase
+        const { data: member } = await admin
           .from('project_members')
-          .select('*')
+          .select('role')
           .eq('project_id', request.project_id)
           .eq('user_id', user.id)
           .single()
@@ -187,7 +194,7 @@ export async function PATCH(req: NextRequest) {
           ? { status: 'approved' as const, approved_at: new Date().toISOString() }
           : { status: 'rejected' as const, rejection_reason: rejection_reason ?? null }
 
-      const { data, error } = await supabase
+      const { data, error } = await admin
         .from('update_requests')
         .update(updatePayload)
         .eq('id', id)
@@ -203,7 +210,7 @@ export async function PATCH(req: NextRequest) {
           ? 'あなたの更新内容が承認され、Ganttチャートに反映されました。'
           : `更新が却下されました。${rejection_reason ? `理由: ${rejection_reason}` : ''}`
 
-      await supabase.from('notifications').insert({
+      await admin.from('notifications').insert({
         user_id: request.assignee_id,
         type: action === 'approve' ? 'update_approved' : 'update_rejected',
         title: notifTitle,

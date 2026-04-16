@@ -10,6 +10,9 @@ interface TaskStore {
   addTask: (task: Task) => void
   removeTask: (id: string) => void
   upsertTask: (task: Task) => void
+  addPhase: (phase: Phase) => void
+  upsertPhase: (phase: Phase) => void
+  removePhase: (id: string) => void
 }
 
 export const useTaskStore = create<TaskStore>((set) => ({
@@ -32,4 +35,15 @@ export const useTaskStore = create<TaskStore>((set) => ({
       }
       return { tasks: [...state.tasks, task] }
     }),
+  addPhase: (phase) => set((state) => ({ phases: [...state.phases, phase] })),
+  upsertPhase: (phase) =>
+    set((state) => {
+      const exists = state.phases.some((p) => p.id === phase.id)
+      if (exists) {
+        return { phases: state.phases.map((p) => (p.id === phase.id ? phase : p)) }
+      }
+      return { phases: [...state.phases, phase] }
+    }),
+  removePhase: (id) =>
+    set((state) => ({ phases: state.phases.filter((p) => p.id !== id) })),
 }))

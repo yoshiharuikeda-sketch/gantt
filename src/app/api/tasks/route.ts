@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import {
-  getTasksByProject,
-  createTask,
-  updateTask,
-  deleteTask,
-} from '@/lib/repositories/taskRepository'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getTasksByProject } from '@/lib/repositories/taskRepository'
 
 // GET /api/tasks?projectId=xxx
 export async function GET(req: NextRequest) {
@@ -40,10 +36,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'project_id and name are required' }, { status: 400 })
     }
 
+    const admin = createAdminClient()
+
     // Verify access
-    const { data: member } = await supabase
+    const { data: member } = await admin
       .from('project_members')
-      .select('*')
+      .select('role')
       .eq('project_id', project_id)
       .eq('user_id', user.id)
       .single()
@@ -52,15 +50,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const task = await createTask({
-      project_id,
-      name,
-      phase_id: phase_id ?? null,
-      start_date: start_date ?? null,
-      end_date: end_date ?? null,
-      assignee_id: assignee_id ?? null,
-      description: description ?? null,
-    })
+    // Get next display_order
+    const { data: existing } = await admin
+      .from('tasks')
+      .select('display_order')
+      .eq('project_id', project_id)
+      .order('display_order', { ascending: false })
+      .limit(1)
+      .single()
+
+    const nextOrder = existing ? existing.display_order + 1 : 0
+
+    const { data: task, error: taskError } = await admin
+      .from('tasks')
+      .insert({
+        project_id,
+        name,
+        phase_id: phase_id ?? null,
+        start_date: start_date ?? null,
+        end_date: end_date ?? null,
+        assignee_id: assignee_id ?? null,
+        description: description ?? null,
+        display_order: nextOrder,
+      })
+      .select()
+      .single()
+
+    if (taskError) throw new Error(taskError.message)
 
     return NextResponse.json(task, { status: 201 })
   } catch (e) {
@@ -82,8 +98,10 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
+    const admin = createAdminClient()
+
     // Check task exists and user has access
-    const { data: task } = await supabase
+    const { data: task } = await admin
       .from('tasks')
       .select('project_id')
       .eq('id', id)
@@ -91,9 +109,9 @@ export async function PATCH(req: NextRequest) {
 
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
 
-    const { data: member } = await supabase
+    const { data: member } = await admin
       .from('project_members')
-      .select('*')
+      .select('role')
       .eq('project_id', task.project_id)
       .eq('user_id', user.id)
       .single()
@@ -102,7 +120,20 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const updated = await updateTask(id, update, version)
+    let query = admin
+      .from('tasks')
+      .update({ ...update, version: (version ?? 0) + 1 })
+      .eq('id', id)
+
+    if (version !== undefined) {
+      query = query.eq('version', version)
+    }
+
+    const { data: updated, error: updateError } = await query.select().single()
+
+    if (updateError) throw new Error(updateError.message)
+    if (!updated) throw new Error('バージョン競合が発生しました。ページを更新してください。')
+
     return NextResponse.json(updated)
   } catch (e) {
     const msg = (e as Error).message
@@ -125,7 +156,9 @@ export async function DELETE(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { data: task } = await supabase
+    const admin = createAdminClient()
+
+    const { data: task } = await admin
       .from('tasks')
       .select('project_id')
       .eq('id', id)
@@ -133,9 +166,9 @@ export async function DELETE(req: NextRequest) {
 
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
 
-    const { data: member } = await supabase
+    const { data: member } = await admin
       .from('project_members')
-      .select('*')
+      .select('role')
       .eq('project_id', task.project_id)
       .eq('user_id', user.id)
       .single()
@@ -144,7 +177,9 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    await deleteTask(id)
+    const { error } = await admin.from('tasks').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+
     return new NextResponse(null, { status: 204 })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })

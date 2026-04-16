@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { Plus, X } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 
 const COLORS = [
   '#3B82F6', '#8B5CF6', '#10B981', '#F59E0B',
@@ -20,39 +20,36 @@ export default function CreateProjectButton({ variant = 'default' }: CreateProje
   const [description, setDescription] = useState('')
   const [color, setColor] = useState(COLORS[0])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
     setLoading(true)
+    setError(null)
 
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { data: project, error } = await supabase
-      .from('projects')
-      .insert({
-        name: name.trim(),
-        description: description.trim() || null,
-        owner_id: user.id,
-        color,
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), description: description.trim() || null, color }),
       })
-      .select()
-      .single()
+      const data = await res.json()
 
-    if (!error && project) {
-      await supabase.from('project_members').insert({
-        project_id: project.id,
-        user_id: user.id,
-        role: 'owner',
-      })
+      if (!res.ok) {
+        setError(data.error ?? '作成に失敗しました')
+        setLoading(false)
+        return
+      }
+
       setOpen(false)
       setName('')
       setDescription('')
-      router.push(`/projects/${project.id}`)
+      router.push(`/projects/${data.id}`)
       router.refresh()
+    } catch {
+      setError('ネットワークエラーが発生しました')
     }
 
     setLoading(false)
@@ -72,7 +69,7 @@ export default function CreateProjectButton({ variant = 'default' }: CreateProje
         新規プロジェクト
       </button>
 
-      {open && (
+      {open && createPortal(
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
@@ -83,6 +80,11 @@ export default function CreateProjectButton({ variant = 'default' }: CreateProje
             </div>
 
             <form onSubmit={handleCreate} className="p-6 space-y-4">
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   プロジェクト名 <span className="text-red-500">*</span>
@@ -93,7 +95,7 @@ export default function CreateProjectButton({ variant = 'default' }: CreateProje
                   onChange={(e) => setName(e.target.value)}
                   required
                   autoFocus
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white"
                   placeholder="例: Webサイトリニューアル"
                 />
               </div>
@@ -104,7 +106,7 @@ export default function CreateProjectButton({ variant = 'default' }: CreateProje
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none text-gray-900 bg-white"
                   placeholder="プロジェクトの概要を入力（任意）"
                 />
               </div>
@@ -146,7 +148,8 @@ export default function CreateProjectButton({ variant = 'default' }: CreateProje
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )
