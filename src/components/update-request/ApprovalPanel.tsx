@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { Check, X, ChevronDown, ChevronUp } from 'lucide-react'
-import type { UpdateRequest } from '@/types'
+import type { UpdateRequest, Task } from '@/types'
+import { useTaskStore } from '@/store/taskStore'
 
 type RequestWithTask = UpdateRequest & {
   tasks?: {
@@ -32,6 +33,7 @@ export default function ApprovalPanel({ request, onClose, onSuccess }: ApprovalP
   const [showRejectForm, setShowRejectForm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { upsertTask } = useTaskStore()
 
   const task = request.tasks
   const responseData = request.response_data as Record<string, unknown> | null
@@ -54,6 +56,13 @@ export default function ApprovalPanel({ request, onClose, onSuccess }: ApprovalP
       if (!res.ok) {
         const data = await res.json()
         throw new Error(data.error ?? '処理に失敗しました')
+      }
+
+      const data = await res.json()
+
+      // 承認時：APIが返したupdatedTaskでストアを即時更新
+      if (action === 'approve' && data.updatedTask) {
+        upsertTask(data.updatedTask as Task)
       }
 
       onSuccess?.()

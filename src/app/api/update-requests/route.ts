@@ -203,6 +203,47 @@ export async function PATCH(req: NextRequest) {
 
       if (error) throw new Error(error.message)
 
+      // If approved, apply response_data to the tasks table
+      let updatedTaskData = null
+      if (action === 'approve') {
+        const responseData = request.response_data as Record<string, unknown> | null
+        if (responseData && Object.keys(responseData).length > 0) {
+          const taskUpdate: Record<string, unknown> = {
+            updated_at: new Date().toISOString(),
+          }
+
+          const requestType = request.request_type as string
+          if (requestType === 'progress') {
+            if ('progress' in responseData) taskUpdate.progress = responseData.progress
+            if ('status' in responseData) taskUpdate.status = responseData.status
+          } else if (requestType === 'schedule') {
+            if ('start_date' in responseData) taskUpdate.start_date = responseData.start_date
+            if ('end_date' in responseData) taskUpdate.end_date = responseData.end_date
+          } else if (requestType === 'status') {
+            if ('status' in responseData) taskUpdate.status = responseData.status
+          } else {
+            // 'general' or fallback: apply all supported fields
+            if ('progress' in responseData) taskUpdate.progress = responseData.progress
+            if ('status' in responseData) taskUpdate.status = responseData.status
+            if ('start_date' in responseData) taskUpdate.start_date = responseData.start_date
+            if ('end_date' in responseData) taskUpdate.end_date = responseData.end_date
+          }
+
+          const { data: taskData, error: taskError } = await admin
+            .from('tasks')
+            .update(taskUpdate)
+            .eq('id', request.task_id)
+            .select()
+            .single()
+
+          if (taskError) {
+            console.error('Failed to update task:', taskError.message)
+          } else {
+            updatedTaskData = taskData
+          }
+        }
+      }
+
       // Notify assignee of outcome
       const notifTitle = action === 'approve' ? '更新が承認されました' : '更新が却下されました'
       const notifBody =
@@ -218,7 +259,7 @@ export async function PATCH(req: NextRequest) {
         data: { update_request_id: id, task_id: request.task_id, project_id: request.project_id },
       })
 
-      return NextResponse.json(data)
+      return NextResponse.json({ ...data, updatedTask: updatedTaskData ?? null })
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
