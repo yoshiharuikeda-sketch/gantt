@@ -494,13 +494,19 @@ export default function TaskSheet() {
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
-                            const v = (e.target as HTMLInputElement).value.trim()
+                            const target = e.target as HTMLInputElement
+                            const v = target.value.trim()
+                            // DOMの値を先にクリアしてonBlurが二重呼び出しされないようにする
+                            target.value = ''
+                            setPendingRows(prev => { const n = { ...prev }; delete n[rowIndex]; return n })
                             if (v) createTask(rowIndex, v)
-                            else setPendingRows(prev => { const n = { ...prev }; delete n[rowIndex]; return n })
+                            target.blur()
                           }
                           if (e.key === 'Escape') {
+                            const target = e.target as HTMLInputElement
+                            target.value = ''
                             setPendingRows(prev => { const n = { ...prev }; delete n[rowIndex]; return n })
-                            ;(e.target as HTMLInputElement).blur()
+                            target.blur()
                           }
                         }}
                         className={`w-full px-2 py-2 text-xs text-gray-900 border-0 outline-none bg-transparent focus:bg-blue-50 min-h-[34px] ${isPending ? 'bg-blue-50' : ''}`}

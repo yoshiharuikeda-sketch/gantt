@@ -70,7 +70,7 @@ async function patchTask(id: string, updates: Partial<Task>): Promise<Task> {
 }
 
 export default function GanttChart() {
-  const { tasks, phases, updateTask } = useTaskStore()
+  const { tasks, phases, updateTask, upsertTask } = useTaskStore()
   const { zoomLevel, ganttColumns, setGanttColumns } = useUIStore()
   const { currentProject, currentUserRole } = useProjectStore()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -81,6 +81,7 @@ export default function GanttChart() {
   const [editing, setEditing] = useState<{ taskId: string; field: GanttColKey } | null>(null)
   const [editValue, setEditValue] = useState<string>('')
   const [showColMenu, setShowColMenu] = useState(false)
+  const [inlineRow, setInlineRow] = useState<number | null>(null)
 
   const canEdit = currentUserRole === 'owner' || currentUserRole === 'editor'
 
@@ -282,6 +283,20 @@ export default function GanttChart() {
     }
   }, [editing, editValue, updateTask])
 
+  // Create task inline from empty row
+  const createTaskInline = useCallback(async (name: string) => {
+    if (!currentProject || !name.trim()) return
+    setInlineRow(null)
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: currentProject.id, name: name.trim() }),
+      })
+      if (res.ok) upsertTask(await res.json())
+    } catch { /* ignore */ }
+  }, [currentProject, upsertTask])
+
   // Get display value for a cell
   const getCellValue = (task: Task, field: GanttColKey): string => {
     switch (field) {
@@ -413,6 +428,7 @@ export default function GanttChart() {
           {rows.map((row, i) => {
             // Empty row
             if (row.type === 'empty') {
+              const isInlineEditing = inlineRow === row.index
               return (
                 <div
                   key={`empty-${row.index}`}
@@ -421,14 +437,52 @@ export default function GanttChart() {
                 >
                   {ganttColumns.map((key, colIdx) => {
                     const def = COL_DEFS[key]
+                    if (colIdx === 0) {
+                      return (
+                        <div
+                          key={key}
+                          className="flex-shrink-0 flex items-center border-r border-gray-100 pl-8 pr-1"
+                          style={{ width: def.width, height: '100%' }}
+                          onClick={() => {
+                            if (canEdit && !isInlineEditing) setInlineRow(row.index)
+                          }}
+                        >
+                          {isInlineEditing ? (
+                            <input
+                              autoFocus
+                              type="text"
+                              className="w-full text-xs bg-blue-50 border border-blue-300 rounded px-1 py-0.5 outline-none"
+                              onBlur={(e) => {
+                                const v = e.target.value.trim()
+                                if (v) createTaskInline(v)
+                                else setInlineRow(null)
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const target = e.target as HTMLInputElement
+                                  const v = target.value.trim()
+                                  target.value = ''
+                                  if (v) createTaskInline(v)
+                                  else setInlineRow(null)
+                                  target.blur()
+                                }
+                                if (e.key === 'Escape') {
+                                  ;(e.target as HTMLInputElement).value = ''
+                                  setInlineRow(null)
+                                }
+                              }}
+                            />
+                          ) : (
+                            <span className={canEdit ? 'w-full h-full cursor-text' : ''} />
+                          )}
+                        </div>
+                      )
+                    }
                     return (
                       <div
                         key={key}
-                        className={`flex-shrink-0 border-r border-gray-100 ${colIdx === 0 && canEdit ? 'cursor-text' : ''}`}
+                        className="flex-shrink-0 border-r border-gray-100"
                         style={{ width: def.width, height: '100%' }}
-                        onClick={() => {
-                          if (colIdx === 0 && canEdit) setShowAddModal(true)
-                        }}
                       />
                     )
                   })}
