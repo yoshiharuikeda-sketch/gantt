@@ -35,6 +35,10 @@ export default function ProjectSettings({
   const [projectName, setProjectName] = useState(project.name)
   const [projectDesc, setProjectDesc] = useState(project.description ?? '')
   const [projectColor, setProjectColor] = useState(project.color)
+  const [projectNumber, setProjectNumber] = useState(project.project_number ?? '')
+  const [clientName, setClientName] = useState(project.client_name ?? '')
+  const [startDate, setStartDate] = useState(project.start_date ?? '')
+  const [endDate, setEndDate] = useState(project.end_date ?? '')
   const [savingProject, setSavingProject] = useState(false)
   const [projectError, setProjectError] = useState<string | null>(null)
 
@@ -64,6 +68,10 @@ export default function ProjectSettings({
           name: projectName,
           description: projectDesc || null,
           color: projectColor,
+          project_number: projectNumber || null,
+          client_name: clientName || null,
+          start_date: startDate || null,
+          end_date: endDate || null,
         }),
       })
 
@@ -219,6 +227,53 @@ export default function ProjectSettings({
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+            </div>
+
+            {/* 工事番号 */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">工事番号</label>
+              <input
+                type="text"
+                value={projectNumber}
+                onChange={(e) => setProjectNumber(e.target.value)}
+                placeholder="例: 2024-001"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* 客先名称 */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">客先名称</label>
+              <input
+                type="text"
+                value={clientName}
+                onChange={(e) => setClientName(e.target.value)}
+                placeholder="例: 株式会社○○"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* 開始日・終了日 */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">開始日</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">終了日</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  min={startDate}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
 
             <div>

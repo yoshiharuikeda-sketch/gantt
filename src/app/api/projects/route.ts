@@ -69,7 +69,7 @@ export async function PATCH(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json()
-    const { id, ...update } = body
+    const { id, name, description, color, status, start_date, end_date, project_number, client_name } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
@@ -87,6 +87,17 @@ export async function PATCH(req: NextRequest) {
 
     if (!member || member.role !== 'owner') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const update = {
+      ...(name !== undefined && { name }),
+      ...(description !== undefined && { description }),
+      ...(color !== undefined && { color }),
+      ...(status !== undefined && { status }),
+      ...(start_date !== undefined && { start_date }),
+      ...(end_date !== undefined && { end_date }),
+      ...(project_number !== undefined && { project_number }),
+      ...(client_name !== undefined && { client_name }),
     }
 
     const { data: project, error: updateError } = await admin

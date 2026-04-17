@@ -40,6 +40,8 @@ export interface Database {
           start_date: string | null
           end_date: string | null
           color: string
+          project_number: string | null
+          client_name: string | null
           created_at: string
           updated_at: string
         }
@@ -52,6 +54,8 @@ export interface Database {
           start_date?: string | null
           end_date?: string | null
           color?: string
+          project_number?: string | null
+          client_name?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -62,6 +66,8 @@ export interface Database {
           start_date?: string | null
           end_date?: string | null
           color?: string
+          project_number?: string | null
+          client_name?: string | null
           updated_at?: string
         }
       }

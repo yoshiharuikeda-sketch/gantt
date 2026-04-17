@@ -7,6 +7,9 @@ import { useProjectStore } from '@/store/projectStore'
 import type { Phase } from '@/types'
 import { Plus, X } from 'lucide-react'
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+const TOTAL_ROWS = 50   // Excel-like: always show this many rows
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 type EditingCell = { rowId: string; field: string }
 
@@ -139,9 +142,7 @@ function EditableCell({
   }, [isEditing, value])
 
   if (readOnly) {
-    return (
-      <div className="px-3 py-2 text-sm text-gray-500 select-text">{value}</div>
-    )
+    return <div className="px-2 py-2 text-xs text-gray-500 select-text min-h-[34px] flex items-center">{value}</div>
   }
 
   const displayValue = type === 'date' ? fmtDate(value) : value
@@ -158,7 +159,7 @@ function EditableCell({
           if (e.key === 'Escape') { onCommit(value); return }
           onKeyDown?.(e)
         }}
-        className="w-full px-3 py-2 text-sm text-gray-900 bg-blue-50 border-0 outline-none focus:bg-blue-50"
+        className="w-full px-2 py-2 text-xs text-gray-900 bg-blue-50 border-0 outline-none focus:bg-blue-50"
         placeholder={placeholder}
         autoComplete="off"
       />
@@ -168,9 +169,9 @@ function EditableCell({
   return (
     <div
       onClick={onStartEdit}
-      className="px-3 py-2 text-sm text-gray-800 cursor-text hover:bg-gray-50 select-text min-h-[38px] flex items-center"
+      className="px-2 py-2 text-xs text-gray-800 cursor-text hover:bg-blue-50/40 select-text min-h-[34px] flex items-center"
     >
-      {displayValue || <span className="text-gray-300">{placeholder ?? (type === 'date' ? '日付を選択' : '')}</span>}
+      {displayValue || <span className="text-gray-300 text-xs">{placeholder ?? (type === 'date' ? '' : '')}</span>}
     </div>
   )
 }
@@ -212,7 +213,7 @@ function ProgressCell({
           if (e.key === 'Escape') { onCommit(value); return }
           onKeyDown?.(e)
         }}
-        className="w-full px-3 py-2 text-sm text-gray-900 bg-blue-50 border-0 outline-none"
+        className="w-full px-2 py-2 text-xs text-gray-900 bg-blue-50 border-0 outline-none"
       />
     )
   }
@@ -220,31 +221,33 @@ function ProgressCell({
   return (
     <div
       onClick={onStartEdit}
-      className="px-3 py-2 cursor-text hover:bg-gray-50 flex items-center gap-2 min-h-[38px]"
+      className="px-2 py-2 cursor-text hover:bg-blue-50/40 flex items-center gap-1.5 min-h-[34px]"
     >
-      <div className="flex-1 bg-gray-200 rounded-full h-1.5">
-        <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${value}%` }} />
+      <div className="flex-1 bg-gray-200 rounded-full h-1">
+        <div className="bg-blue-500 h-1 rounded-full" style={{ width: `${value}%` }} />
       </div>
-      <span className="text-xs text-gray-600 w-8 text-right tabular-nums">{value}%</span>
+      <span className="text-xs text-gray-600 w-8 text-right tabular-nums flex-shrink-0">{value}%</span>
     </div>
   )
 }
 
 // ─── Main TaskSheet ───────────────────────────────────────────────────────────
 export default function TaskSheet() {
-  const { tasks, phases, upsertTask } = useTaskStore()
+  const { tasks, phases, upsertTask, removeTask } = useTaskStore()
   const { currentProject, currentUserRole } = useProjectStore()
   const [editing, setEditing] = useState<EditingCell | null>(null)
-  const [newRows, setNewRows] = useState<{ id: string; name: string }[]>([])
   const [showPhaseModal, setShowPhaseModal] = useState(false)
+  // Track which empty rows are being actively typed in (before task creation)
+  const [pendingRows, setPendingRows] = useState<Record<number, string>>({})
   const inputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map())
 
   const canEdit = currentUserRole === 'owner' || currentUserRole === 'editor'
 
-  const COLS = ['name', 'start_date', 'end_date', 'progress', 'updated_at'] as const
+  const COLS = ['name', 'phase', 'start_date', 'end_date', 'progress', 'updated_at'] as const
   type ColKey = typeof COLS[number]
+  const EDITABLE_COLS: ColKey[] = ['name', 'start_date', 'end_date', 'progress']
 
-  // ── Focus an input after render ───────────────────────────────────────────
+  // ── Focus input after render ──────────────────────────────────────────────
   useEffect(() => {
     if (editing) {
       const key = `${editing.rowId}-${editing.field}`
@@ -257,7 +260,7 @@ export default function TaskSheet() {
   const patchTask = useCallback(async (taskId: string, field: string, value: unknown) => {
     const task = tasks.find(t => t.id === taskId)
     if (!task) return
-    upsertTask({ ...task, [field]: value })
+    upsertTask({ ...task, [field]: value, updated_at: new Date().toISOString() })
     try {
       const res = await fetch('/api/tasks', {
         method: 'PATCH',
@@ -271,12 +274,23 @@ export default function TaskSheet() {
     }
   }, [tasks, upsertTask])
 
-  // ── POST new task ────────────────────────────────────────────────────────
-  const createTask = useCallback(async (tempId: string, name: string) => {
+  // ── DELETE task (name cleared) ──────────────────────────────────────────
+  const deleteTask = useCallback(async (taskId: string) => {
+    removeTask(taskId)
+    try {
+      await fetch(`/api/tasks?id=${taskId}`, { method: 'DELETE' })
+    } catch {
+      // rollback handled by realtime
+    }
+  }, [removeTask])
+
+  // ── POST new task from an empty row ─────────────────────────────────────
+  const createTask = useCallback(async (rowIndex: number, name: string) => {
     if (!currentProject || !name.trim()) {
-      setNewRows(prev => prev.filter(r => r.id !== tempId))
+      setPendingRows(prev => { const n = { ...prev }; delete n[rowIndex]; return n })
       return
     }
+    setPendingRows(prev => { const n = { ...prev }; delete n[rowIndex]; return n })
     try {
       const res = await fetch('/api/tasks', {
         method: 'POST',
@@ -284,76 +298,43 @@ export default function TaskSheet() {
         body: JSON.stringify({ project_id: currentProject.id, name: name.trim() }),
       })
       if (res.ok) upsertTask(await res.json())
-    } finally {
-      setNewRows(prev => prev.filter(r => r.id !== tempId))
-    }
+    } catch { /* ignore */ }
   }, [currentProject, upsertTask])
 
-  // ── Add new blank row at bottom ──────────────────────────────────────────
-  const handleAddRow = useCallback(() => {
-    if (!canEdit) return
-    const tempId = `new-${Date.now()}`
-    setNewRows(prev => [...prev, { id: tempId, name: '' }])
-    setTimeout(() => setEditing({ rowId: tempId, field: 'name' }), 30)
-  }, [canEdit])
-
-  // ── Keyboard navigation ──────────────────────────────────────────────────
+  // ── Keyboard nav (Tab/Enter) ─────────────────────────────────────────────
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>, rowId: string, field: ColKey) => {
       if (e.key !== 'Enter' && e.key !== 'Tab') return
       e.preventDefault()
-
-      const isNew = rowId.startsWith('new-')
-      if (isNew && field === 'name') {
-        const row = newRows.find(r => r.id === rowId)
-        const nameVal = (e.target as HTMLInputElement).value
-        if (nameVal.trim()) {
-          createTask(rowId, nameVal)
-          setEditing(null)
-        } else {
-          setNewRows(prev => prev.filter(r => r.id !== rowId))
-          setEditing(null)
-        }
-        return
-      }
-
-      // Move to next column
-      const editableCols = COLS.filter(c => c !== 'updated_at') as ColKey[]
-      const colIdx = editableCols.indexOf(field)
-      if (colIdx < editableCols.length - 1) {
-        setEditing({ rowId, field: editableCols[colIdx + 1] })
+      const colIdx = EDITABLE_COLS.indexOf(field)
+      if (colIdx < EDITABLE_COLS.length - 1) {
+        setEditing({ rowId, field: EDITABLE_COLS[colIdx + 1] })
       } else {
         setEditing(null)
       }
     },
-    [newRows, createTask, COLS]
+    [EDITABLE_COLS]
   )
 
   const startEdit = (rowId: string, field: ColKey) => {
     if (!canEdit) return
-    if (field === 'updated_at') return
+    if (field === 'updated_at' || field === 'phase') return
     setEditing({ rowId, field })
   }
 
   const commitEdit = (rowId: string, field: ColKey, value: unknown) => {
-    const isNew = rowId.startsWith('new-')
-    if (isNew) {
-      if (field === 'name') {
-        const nameVal = String(value)
-        if (nameVal.trim()) {
-          createTask(rowId, nameVal)
-        } else {
-          setNewRows(prev => prev.filter(r => r.id !== rowId))
-        }
-      }
-      setEditing(null)
-      return
-    }
     setEditing(null)
     const task = tasks.find(t => t.id === rowId)
     if (!task) return
+    if (field === 'name') {
+      const newName = String(value).trim()
+      if (!newName) {
+        deleteTask(rowId)
+        return
+      }
+    }
     const current = task[field as keyof typeof task]
-    if (current !== value) patchTask(rowId, field, value || null)
+    if (current !== value) patchTask(rowId, field, value === '' ? null : value)
   }
 
   const getRef = (rowId: string, field: string) => {
@@ -362,53 +343,55 @@ export default function TaskSheet() {
     }
   }
 
+  // ── Build row list: tasks + empty rows up to TOTAL_ROWS ──────────────────
+  const emptyCount = Math.max(0, TOTAL_ROWS - tasks.length)
+  const emptyRows = Array.from({ length: emptyCount }, (_, i) => tasks.length + i)
+
   // ─── Render ──────────────────────────────────────────────────────────────
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 flex-shrink-0">
-        <span className="text-xs text-gray-500">{tasks.length} タスク</span>
+        <span className="text-xs text-gray-400">{tasks.length} タスク</span>
         {canEdit && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowPhaseModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              フェーズ追加
-            </button>
-            <button
-              onClick={handleAddRow}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              行を追加
-            </button>
-          </div>
+          <button
+            onClick={() => setShowPhaseModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            フェーズ追加
+          </button>
         )}
       </div>
 
       {/* Table */}
       <div className="flex-1 overflow-auto">
-        <table className="w-full border-collapse text-sm">
-          <thead className="sticky top-0 z-10 bg-gray-50">
+        <table className="w-full border-collapse text-xs select-none">
+          <thead className="sticky top-0 z-10 bg-[#f2f2f2]">
             <tr>
-              <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 border-b border-r border-gray-200 w-full min-w-[200px]">タスク名</th>
-              <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 border-b border-r border-gray-200 w-28">フェーズ</th>
-              <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 border-b border-r border-gray-200 w-[120px]">開始日</th>
-              <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 border-b border-r border-gray-200 w-[120px]">終了日</th>
-              <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 border-b border-r border-gray-200 w-[150px]">進捗率</th>
-              <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 border-b border-gray-200 w-[130px]">更新日</th>
+              {/* Row number */}
+              <th className="w-9 border-b border-r border-gray-300 text-center py-2 text-xs text-gray-400 font-normal bg-[#f2f2f2]" />
+              <th className="text-left px-2 py-2 font-semibold text-gray-600 border-b border-r border-gray-300 min-w-[200px]">タスク名</th>
+              <th className="text-left px-2 py-2 font-semibold text-gray-600 border-b border-r border-gray-300 w-28">フェーズ</th>
+              <th className="text-left px-2 py-2 font-semibold text-gray-600 border-b border-r border-gray-300 w-[110px]">開始日</th>
+              <th className="text-left px-2 py-2 font-semibold text-gray-600 border-b border-r border-gray-300 w-[110px]">終了日</th>
+              <th className="text-left px-2 py-2 font-semibold text-gray-600 border-b border-r border-gray-300 w-[140px]">進捗率</th>
+              <th className="text-left px-2 py-2 font-semibold text-gray-600 border-b border-gray-300 w-[110px]">更新日</th>
             </tr>
           </thead>
           <tbody>
-            {tasks.map((task) => (
+            {/* ── Existing tasks ── */}
+            {tasks.map((task, idx) => (
               <tr
                 key={task.id}
-                className="border-b border-gray-100 hover:bg-gray-50/50 group"
+                className={`border-b border-gray-200 group ${editing?.rowId === task.id ? 'bg-white' : 'hover:bg-[#e8f0fe]/30'}`}
               >
+                {/* Row number */}
+                <td className="border-r border-gray-200 text-center text-xs text-gray-400 py-2 bg-[#f8f8f8] w-9 select-none">
+                  {idx + 1}
+                </td>
                 {/* タスク名 */}
-                <td className="border-r border-gray-100 p-0">
+                <td className="border-r border-gray-200 p-0">
                   <EditableCell
                     value={task.name}
                     isEditing={editing?.rowId === task.id && editing.field === 'name'}
@@ -420,48 +403,46 @@ export default function TaskSheet() {
                   />
                 </td>
                 {/* フェーズ */}
-                <td className="border-r border-gray-100 p-0">
+                <td className="border-r border-gray-200 p-0">
                   {(() => {
                     const phase = task.phase_id ? phases.find(p => p.id === task.phase_id) : undefined
                     if (phase) {
                       return (
-                        <div className="px-3 py-2 min-h-[38px] flex items-center gap-1">
+                        <div className="px-2 py-2 min-h-[34px] flex items-center gap-1">
                           <span style={{ color: phase.color ?? '#6366f1' }} className="text-xs leading-none">●</span>
                           <span className="text-gray-600 text-xs truncate">{phase.name}</span>
                         </div>
                       )
                     }
-                    return (
-                      <div className="px-3 py-2 min-h-[38px] flex items-center text-gray-400 text-xs">-</div>
-                    )
+                    return <div className="px-2 py-2 min-h-[34px]" />
                   })()}
                 </td>
                 {/* 開始日 */}
-                <td className="border-r border-gray-100 p-0">
+                <td className="border-r border-gray-200 p-0">
                   <EditableCell
                     value={task.start_date ?? ''}
                     type="date"
                     isEditing={editing?.rowId === task.id && editing.field === 'start_date'}
                     onStartEdit={() => startEdit(task.id, 'start_date')}
-                    onCommit={(v) => commitEdit(task.id, 'start_date', v || null)}
+                    onCommit={(v) => commitEdit(task.id, 'start_date', v)}
                     onKeyDown={(e) => handleKeyDown(e, task.id, 'start_date')}
                     inputRef={{ current: null } as React.RefObject<HTMLInputElement | null>}
                   />
                 </td>
                 {/* 終了日 */}
-                <td className="border-r border-gray-100 p-0">
+                <td className="border-r border-gray-200 p-0">
                   <EditableCell
                     value={task.end_date ?? ''}
                     type="date"
                     isEditing={editing?.rowId === task.id && editing.field === 'end_date'}
                     onStartEdit={() => startEdit(task.id, 'end_date')}
-                    onCommit={(v) => commitEdit(task.id, 'end_date', v || null)}
+                    onCommit={(v) => commitEdit(task.id, 'end_date', v)}
                     onKeyDown={(e) => handleKeyDown(e, task.id, 'end_date')}
                     inputRef={{ current: null } as React.RefObject<HTMLInputElement | null>}
                   />
                 </td>
                 {/* 進捗率 */}
-                <td className="border-r border-gray-100 p-0">
+                <td className="border-r border-gray-200 p-0">
                   <ProgressCell
                     value={task.progress ?? 0}
                     isEditing={editing?.rowId === task.id && editing.field === 'progress'}
@@ -473,75 +454,78 @@ export default function TaskSheet() {
                 </td>
                 {/* 更新日 */}
                 <td className="p-0">
-                  <div className="px-3 py-2 text-xs text-gray-400 min-h-[38px] flex items-center">
+                  <div className="px-2 py-2 text-xs text-gray-400 min-h-[34px] flex items-center">
                     {fmtDate(task.updated_at)}
                   </div>
                 </td>
               </tr>
             ))}
 
-            {/* New (pending) rows */}
-            {newRows.map((row) => (
-              <tr key={row.id} className="border-b border-blue-100 bg-blue-50/40">
-                <td className="border-r border-blue-100 p-0" colSpan={1}>
-                  <input
-                    ref={getRef(row.id, 'name')}
-                    type="text"
-                    defaultValue=""
-                    placeholder="タスク名を入力して Enter"
-                    className="w-full px-3 py-2 text-sm text-gray-900 bg-transparent border-0 outline-none focus:bg-blue-100/50 placeholder-gray-400"
-                    onBlur={(e) => {
-                      const v = e.target.value
-                      if (v.trim()) createTask(row.id, v)
-                      else setNewRows(prev => prev.filter(r => r.id !== row.id))
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        const v = (e.target as HTMLInputElement).value
-                        if (v.trim()) createTask(row.id, v)
-                        else setNewRows(prev => prev.filter(r => r.id !== row.id))
-                        setEditing(null)
-                      }
-                      if (e.key === 'Escape') {
-                        setNewRows(prev => prev.filter(r => r.id !== row.id))
-                        setEditing(null)
-                      }
-                    }}
-                  />
-                </td>
-                <td className="border-r border-blue-100 p-0">
-                  <div className="px-3 py-2 text-sm text-gray-300 min-h-[38px]" />
-                </td>
-                <td className="border-r border-blue-100 p-0">
-                  <div className="px-3 py-2 text-sm text-gray-300 min-h-[38px]" />
-                </td>
-                <td className="border-r border-blue-100 p-0">
-                  <div className="px-3 py-2 text-sm text-gray-300 min-h-[38px]" />
-                </td>
-                <td className="border-r border-blue-100 p-0">
-                  <div className="px-3 py-2 text-sm text-gray-300 min-h-[38px]" />
-                </td>
-                <td className="p-0">
-                  <div className="px-3 py-2 text-sm text-gray-300 min-h-[38px]" />
-                </td>
-              </tr>
-            ))}
-
-            {/* Empty state */}
-            {tasks.length === 0 && newRows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">
-                  タスクがありません。「行を追加」ボタンからタスクを作成してください。
-                </td>
-              </tr>
-            )}
+            {/* ── Empty rows (Excel-like) ── */}
+            {emptyRows.map((rowIndex) => {
+              const emptyRowId = `empty-${rowIndex}`
+              const isPending = pendingRows[rowIndex] !== undefined
+              return (
+                <tr
+                  key={emptyRowId}
+                  className="border-b border-gray-200 hover:bg-[#e8f0fe]/20"
+                >
+                  {/* Row number */}
+                  <td className="border-r border-gray-200 text-center text-xs text-gray-400 py-2 bg-[#f8f8f8] w-9 select-none">
+                    {rowIndex + 1}
+                  </td>
+                  {/* タスク名（入力可）*/}
+                  <td className="border-r border-gray-200 p-0" colSpan={1}>
+                    {canEdit ? (
+                      <input
+                        ref={getRef(emptyRowId, 'name')}
+                        type="text"
+                        value={pendingRows[rowIndex] ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          setPendingRows(prev => ({ ...prev, [rowIndex]: v }))
+                        }}
+                        onBlur={(e) => {
+                          const v = e.target.value.trim()
+                          if (v) createTask(rowIndex, v)
+                          else setPendingRows(prev => { const n = { ...prev }; delete n[rowIndex]; return n })
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const v = (e.target as HTMLInputElement).value.trim()
+                            if (v) createTask(rowIndex, v)
+                            else setPendingRows(prev => { const n = { ...prev }; delete n[rowIndex]; return n })
+                          }
+                          if (e.key === 'Escape') {
+                            setPendingRows(prev => { const n = { ...prev }; delete n[rowIndex]; return n })
+                            ;(e.target as HTMLInputElement).blur()
+                          }
+                        }}
+                        className={`w-full px-2 py-2 text-xs text-gray-900 border-0 outline-none bg-transparent focus:bg-blue-50 min-h-[34px] ${isPending ? 'bg-blue-50' : ''}`}
+                        placeholder=""
+                      />
+                    ) : (
+                      <div className="px-2 py-2 min-h-[34px]" />
+                    )}
+                  </td>
+                  {/* 残列は空 */}
+                  <td className="border-r border-gray-200 min-h-[34px]" />
+                  <td className="border-r border-gray-200 min-h-[34px]" />
+                  <td className="border-r border-gray-200 min-h-[34px]" />
+                  <td className="border-r border-gray-200 min-h-[34px]" />
+                  <td className="min-h-[34px]" />
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
 
-      {/* Phase modal */}
       {showPhaseModal && currentProject && (
-        <AddPhaseModal projectId={currentProject.id} onClose={() => setShowPhaseModal(false)} />
+        <AddPhaseModal
+          projectId={currentProject.id}
+          onClose={() => setShowPhaseModal(false)}
+        />
       )}
     </div>
   )
