@@ -232,7 +232,7 @@ function ProgressCell({
 
 // ─── Main TaskSheet ───────────────────────────────────────────────────────────
 export default function TaskSheet() {
-  const { tasks, upsertTask } = useTaskStore()
+  const { tasks, phases, upsertTask } = useTaskStore()
   const { currentProject, currentUserRole } = useProjectStore()
   const [editing, setEditing] = useState<EditingCell | null>(null)
   const [newRows, setNewRows] = useState<{ id: string; name: string }[]>([])
@@ -394,6 +394,7 @@ export default function TaskSheet() {
           <thead className="sticky top-0 z-10 bg-gray-50">
             <tr>
               <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 border-b border-r border-gray-200 w-full min-w-[200px]">タスク名</th>
+              <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 border-b border-r border-gray-200 w-28">フェーズ</th>
               <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 border-b border-r border-gray-200 w-[120px]">開始日</th>
               <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 border-b border-r border-gray-200 w-[120px]">終了日</th>
               <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-600 border-b border-r border-gray-200 w-[150px]">進捗率</th>
@@ -417,6 +418,23 @@ export default function TaskSheet() {
                     inputRef={{ current: null } as React.RefObject<HTMLInputElement | null>}
                     placeholder="タスク名"
                   />
+                </td>
+                {/* フェーズ */}
+                <td className="border-r border-gray-100 p-0">
+                  {(() => {
+                    const phase = task.phase_id ? phases.find(p => p.id === task.phase_id) : undefined
+                    if (phase) {
+                      return (
+                        <div className="px-3 py-2 min-h-[38px] flex items-center gap-1">
+                          <span style={{ color: phase.color ?? '#6366f1' }} className="text-xs leading-none">●</span>
+                          <span className="text-gray-600 text-xs truncate">{phase.name}</span>
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className="px-3 py-2 min-h-[38px] flex items-center text-gray-400 text-xs">-</div>
+                    )
+                  })()}
                 </td>
                 {/* 開始日 */}
                 <td className="border-r border-gray-100 p-0">
@@ -500,6 +518,9 @@ export default function TaskSheet() {
                 <td className="border-r border-blue-100 p-0">
                   <div className="px-3 py-2 text-sm text-gray-300 min-h-[38px]" />
                 </td>
+                <td className="border-r border-blue-100 p-0">
+                  <div className="px-3 py-2 text-sm text-gray-300 min-h-[38px]" />
+                </td>
                 <td className="p-0">
                   <div className="px-3 py-2 text-sm text-gray-300 min-h-[38px]" />
                 </td>
@@ -509,7 +530,7 @@ export default function TaskSheet() {
             {/* Empty state */}
             {tasks.length === 0 && newRows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-sm text-gray-400">
+                <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">
                   タスクがありません。「行を追加」ボタンからタスクを作成してください。
                 </td>
               </tr>

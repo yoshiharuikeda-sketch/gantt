@@ -45,6 +45,11 @@ export default function ProjectSettings({
   const [inviteError, setInviteError] = useState<string | null>(null)
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null)
 
+  // Delete project
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
   const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault()
     setSavingProject(true)
@@ -156,6 +161,25 @@ export default function ProjectSettings({
       setMembers((prev) => prev.filter((m) => m.user_id !== userId))
     } catch (e) {
       alert((e as Error).message)
+    }
+  }
+
+  const handleDeleteProject = async () => {
+    if (deleteConfirmText !== project.name) return
+    setDeleting(true)
+    setDeleteError(null)
+
+    try {
+      const res = await fetch(`/api/projects?id=${project.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error ?? '削除に失敗しました')
+      }
+      router.push('/')
+      router.refresh()
+    } catch (e) {
+      setDeleteError((e as Error).message)
+      setDeleting(false)
     }
   }
 
@@ -279,6 +303,7 @@ export default function ProjectSettings({
           {/* Member list */}
           <div className="divide-y divide-gray-100">
             {members.map((m) => {
+
               const name = m.profiles?.display_name ?? m.profiles?.email ?? m.user_id
               const isCurrentUser = m.user_id === currentUserId
               const isOwner = m.role === 'owner'
@@ -328,6 +353,41 @@ export default function ProjectSettings({
                 </div>
               )
             })}
+          </div>
+        </section>
+
+        {/* Danger zone */}
+        <section className="bg-white rounded-xl border border-red-200 p-6">
+          <h2 className="text-sm font-semibold text-red-600 mb-1">危険ゾーン</h2>
+          <p className="text-xs text-gray-500 mb-4">
+            プロジェクトを削除すると、すべてのタスク・フェーズ・メンバー情報が完全に削除されます。この操作は取り消せません。
+          </p>
+
+          {deleteError && (
+            <p className="mb-3 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{deleteError}</p>
+          )}
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                確認のため、プロジェクト名「<span className="font-semibold">{project.name}</span>」を入力してください
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={project.name}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+              />
+            </div>
+            <button
+              onClick={handleDeleteProject}
+              disabled={deleteConfirmText !== project.name || deleting}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              {deleting ? '削除中...' : 'プロジェクトを削除'}
+            </button>
           </div>
         </section>
       </div>
