@@ -150,6 +150,7 @@ function EditableCell({
   if (isEditing) {
     return (
       <input
+        autoFocus
         ref={inputRef as React.RefObject<HTMLInputElement>}
         type={type}
         value={draft}
@@ -201,6 +202,7 @@ function ProgressCell({
   if (isEditing) {
     return (
       <input
+        autoFocus
         ref={inputRef as React.RefObject<HTMLInputElement>}
         type="number"
         min={0}

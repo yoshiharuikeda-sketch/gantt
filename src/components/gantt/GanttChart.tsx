@@ -29,6 +29,7 @@ import type { Task } from '@/types'
 
 const ROW_HEIGHT = 36
 const HEADER_HEIGHT = 56
+const TOTAL_ROWS = 30  // minimum rows shown (Excel-like)
 
 // Column definitions
 interface ColDef {
@@ -190,9 +191,13 @@ export default function GanttChart() {
     }))
   }, [zoomLevel, timelineStart, timelineEnd, dayWidth])
 
-  // Group tasks by phase
+  // Group tasks by phase + empty rows
   const rows = useMemo(() => {
-    const result: Array<{ type: 'phase'; phase: typeof phases[0] } | { type: 'task'; task: typeof tasks[0]; phaseColor: string }> = []
+    const result: Array<
+      | { type: 'phase'; phase: typeof phases[0] }
+      | { type: 'task'; task: typeof tasks[0]; phaseColor: string }
+      | { type: 'empty'; index: number }
+    > = []
 
     const phasedTasks = new Set<string>()
 
@@ -215,6 +220,12 @@ export default function GanttChart() {
       for (const task of unphased) {
         result.push({ type: 'task', task, phaseColor: '#94a3b8' })
       }
+    }
+
+    // Pad to TOTAL_ROWS with empty rows
+    const emptyCount = Math.max(0, TOTAL_ROWS - result.length)
+    for (let i = 0; i < emptyCount; i++) {
+      result.push({ type: 'empty', index: i })
     }
 
     return result
@@ -306,27 +317,6 @@ export default function GanttChart() {
   }
 
   if (!currentProject) return null
-
-  if (tasks.length === 0) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center text-gray-400">
-          <p className="text-sm font-medium text-gray-500">タスクがありません</p>
-          <p className="text-xs mt-1">タスクを追加するとGanttチャートが表示されます</p>
-          {canEdit && (
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="mt-4 flex items-center gap-1.5 px-4 py-2 mx-auto bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              タスク追加
-            </button>
-          )}
-        </div>
-        {showAddModal && <AddTaskModal onClose={() => setShowAddModal(false)} />}
-      </div>
-    )
-  }
 
   return (
     <>
@@ -421,6 +411,31 @@ export default function GanttChart() {
           style={{ scrollbarWidth: 'none' }}
         >
           {rows.map((row, i) => {
+            // Empty row
+            if (row.type === 'empty') {
+              return (
+                <div
+                  key={`empty-${row.index}`}
+                  className="flex items-center border-b border-gray-100 hover:bg-blue-50/20"
+                  style={{ height: ROW_HEIGHT, width: leftPanelWidth }}
+                >
+                  {ganttColumns.map((key, colIdx) => {
+                    const def = COL_DEFS[key]
+                    return (
+                      <div
+                        key={key}
+                        className={`flex-shrink-0 border-r border-gray-100 ${colIdx === 0 && canEdit ? 'cursor-text' : ''}`}
+                        style={{ width: def.width, height: '100%' }}
+                        onClick={() => {
+                          if (colIdx === 0 && canEdit) setShowAddModal(true)
+                        }}
+                      />
+                    )
+                  })}
+                </div>
+              )
+            }
+
             if (row.type === 'phase') {
               return (
                 <div
@@ -594,7 +609,7 @@ export default function GanttChart() {
 
             {/* Task bars */}
             {rows.map((row, i) => {
-              if (row.type === 'phase') return null
+              if (row.type === 'phase' || row.type === 'empty') return null
               const { task, phaseColor } = row
               if (!task.start_date || !task.end_date) return null
 
