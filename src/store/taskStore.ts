@@ -13,6 +13,7 @@ interface TaskStore {
   addPhase: (phase: Phase) => void
   upsertPhase: (phase: Phase) => void
   removePhase: (id: string) => void
+  reorderTasks: (orderedIds: string[]) => void
 }
 
 export const useTaskStore = create<TaskStore>((set) => ({
@@ -46,4 +47,11 @@ export const useTaskStore = create<TaskStore>((set) => ({
     }),
   removePhase: (id) =>
     set((state) => ({ phases: state.phases.filter((p) => p.id !== id) })),
+  reorderTasks: (orderedIds) =>
+    set((state) => {
+      const taskMap = new Map(state.tasks.map(t => [t.id, t]))
+      const ordered = orderedIds.map(id => taskMap.get(id)).filter((t): t is Task => t !== undefined)
+      const rest = state.tasks.filter(t => !orderedIds.includes(t.id))
+      return { tasks: [...ordered, ...rest] }
+    }),
 }))

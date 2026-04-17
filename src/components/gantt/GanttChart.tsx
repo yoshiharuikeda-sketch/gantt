@@ -9,6 +9,7 @@ import { useProjectStore } from '@/store/projectStore'
 import AddTaskModal from './AddTaskModal'
 import TaskContextMenu from './TaskContextMenu'
 import { useGanttDrag } from './hooks/useGanttDrag'
+import DatePickerPopup from '@/components/ui/DatePickerPopup'
 import {
   DAY_WIDTH_MAP,
   getBarX,
@@ -82,6 +83,12 @@ export default function GanttChart() {
   const [editValue, setEditValue] = useState<string>('')
   const [showColMenu, setShowColMenu] = useState(false)
   const [inlineRow, setInlineRow] = useState<number | null>(null)
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const [datePicker, setDatePicker] = useState<{
+    taskId: string
+    field: 'start_date' | 'end_date'
+    rect: DOMRect
+  } | null>(null)
 
   const canEdit = currentUserRole === 'owner' || currentUserRole === 'editor'
 
@@ -512,10 +519,13 @@ export default function GanttChart() {
             }
 
             const { task, phaseColor } = row
+            const isRowSelected = selectedTaskId === task.id
             return (
               <div
                 key={`task-${task.id}`}
-                className="flex items-center border-b border-gray-100 hover:bg-blue-50 transition-colors"
+                className={`flex items-center border-b border-gray-100 transition-colors ${
+                  isRowSelected ? 'bg-blue-50' : 'hover:bg-blue-50'
+                }`}
                 style={{ height: ROW_HEIGHT }}
                 onContextMenu={(e) => {
                   e.preventDefault()
@@ -526,18 +536,29 @@ export default function GanttChart() {
                   const def = COL_DEFS[key]
                   const isEditing = editing?.taskId === task.id && editing?.field === key
                   const isEditable = canEdit && key !== 'updated_at'
+                  const isDateField = key === 'start_date' || key === 'end_date'
 
                   return (
                     <div
                       key={key}
                       className={`flex-shrink-0 flex items-center border-r border-gray-100 overflow-hidden ${
                         colIdx === 0 ? 'pl-8' : 'px-2'
-                      } ${isEditable ? 'cursor-text' : ''}`}
+                      } ${isEditable && !isDateField ? 'cursor-text' : isEditable && isDateField ? 'cursor-pointer' : ''}`}
                       style={{ width: def.width, height: '100%' }}
-                      onClick={() => {
-                        if (isEditable) {
+                      onClick={(e) => {
+                        if (!isEditable) return
+                        if (isDateField) {
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                          setDatePicker({ taskId: task.id, field: key as 'start_date' | 'end_date', rect })
+                        } else if (key === 'name') {
+                          setSelectedTaskId(task.id)
+                        } else {
                           startEdit(task.id, key, getRawValue(task, key))
                         }
+                      }}
+                      onDoubleClick={() => {
+                        if (!canEdit || key === 'updated_at' || isDateField) return
+                        startEdit(task.id, key, getRawValue(task, key))
                       }}
                     >
                       {isEditing ? (
@@ -548,6 +569,7 @@ export default function GanttChart() {
                           max={key === 'progress' ? 100 : undefined}
                           value={editValue}
                           onChange={(e) => setEditValue(e.target.value)}
+                          onFocus={(e) => e.target.select()}
                           onBlur={commitEdit}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') commitEdit()
@@ -747,6 +769,22 @@ export default function GanttChart() {
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+      {datePicker && (
+        <DatePickerPopup
+          value={
+            datePicker.field === 'start_date'
+              ? tasks.find(t => t.id === datePicker.taskId)?.start_date ?? null
+              : tasks.find(t => t.id === datePicker.taskId)?.end_date ?? null
+          }
+          anchorRect={datePicker.rect}
+          onChange={(date) => {
+            const updates: Partial<Task> = { [datePicker.field]: date }
+            updateTask(datePicker.taskId, updates)
+            patchTask(datePicker.taskId, updates).catch(console.error)
+          }}
+          onClose={() => setDatePicker(null)}
         />
       )}
     </>
