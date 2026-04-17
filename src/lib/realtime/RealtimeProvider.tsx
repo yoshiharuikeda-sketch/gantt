@@ -3,8 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useTaskStore } from '@/store/taskStore'
-import { useNotificationStore } from '@/store/notificationStore'
-import type { Task, Notification } from '@/types'
+import type { Task } from '@/types'
 
 interface RealtimeProviderProps {
   projectId: string
@@ -18,7 +17,6 @@ export default function RealtimeProvider({
   children,
 }: RealtimeProviderProps) {
   const { upsertTask, removeTask } = useTaskStore()
-  const { addNotification } = useNotificationStore()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channelRef = useRef<any>(null)
 
@@ -68,19 +66,6 @@ export default function RealtimeProvider({
           removeTask(deletedTask.id)
         }
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${currentUserId}`,
-        },
-        (payload: any) => {
-          const notification = payload.new as Notification
-          addNotification(notification)
-        }
-      )
       .subscribe()
 
     channelRef.current = channel as typeof channelRef.current
@@ -88,7 +73,7 @@ export default function RealtimeProvider({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [projectId, currentUserId, upsertTask, removeTask, addNotification])
+  }, [projectId, currentUserId, upsertTask, removeTask])
 
   return <>{children}</>
 }

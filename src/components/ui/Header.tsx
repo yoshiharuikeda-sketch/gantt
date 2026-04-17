@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, LogOut, User, CheckCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import type { Profile, UpdateRequest } from '@/types'
+import type { RealtimePostgresInsertPayload, User as SupabaseUser } from '@supabase/supabase-js'
+import type { Profile, UpdateRequest, Notification } from '@/types'
 import { useNotificationStore } from '@/store/notificationStore'
 import { formatDateTime } from '@/lib/utils/dateUtils'
 import ResponseForm from '@/components/update-request/ResponseForm'
@@ -20,7 +21,7 @@ interface HeaderProps {
 
 export default function Header({ profile }: HeaderProps) {
   const router = useRouter()
-  const { notifications, unreadCount, setNotifications, markAsRead } = useNotificationStore()
+  const { notifications, unreadCount, setNotifications, markAsRead, addNotification } = useNotificationStore()
   const [bellOpen, setBellOpen] = useState(false)
   const bellRef = useRef<HTMLDivElement>(null)
   const [activeRequest, setActiveRequest] = useState<RequestWithTask | null>(null)
@@ -33,6 +34,39 @@ export default function Header({ profile }: HeaderProps) {
       .then((data) => { if (Array.isArray(data)) setNotifications(data) })
       .catch(() => {})
   }, [setNotifications])
+
+  // Subscribe to real-time notification inserts for current user
+  useEffect(() => {
+    const supabase = createClient()
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    supabase.auth.getUser().then(({ data: { user } }: { data: { user: SupabaseUser | null } }) => {
+      if (!user) return
+
+      channel = supabase
+        .channel(`notifications:${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload: RealtimePostgresInsertPayload<Notification>) => {
+            addNotification(payload.new as Notification)
+          }
+        )
+        .subscribe()
+    })
+
+    return () => {
+      if (channel) {
+        const supabase = createClient()
+        supabase.removeChannel(channel)
+      }
+    }
+  }, [addNotification])
 
   // Close dropdown on outside click
   useEffect(() => {
