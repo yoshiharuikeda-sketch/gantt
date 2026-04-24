@@ -601,61 +601,62 @@ export default function GanttChart() {
       </div>
 
       {/* Right panel: timeline */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        {/* Timeline header */}
-        <div
-          className="flex-shrink-0 bg-gray-50 border-b border-gray-200 overflow-hidden"
-          style={{ height: HEADER_HEIGHT }}
-        >
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-auto"
+      >
+        <div style={{ width: totalWidth }}>
+          {/* Timeline header — sticky so it stays at top during vertical scroll
+              and moves with horizontal scroll since it shares the same container */}
           <div
-            className="relative"
-            style={{ width: totalWidth, height: HEADER_HEIGHT }}
+            className="sticky top-0 z-20 bg-gray-50 border-b border-gray-200"
+            style={{ height: HEADER_HEIGHT }}
           >
-            {/* Month / Year labels at top */}
-            {zoomLevel !== 'month' && (
-              <div className="absolute top-0 left-0 right-0 h-6 flex">
-                {columns
-                  .filter((_, i) => i === 0 || columns[i].sublabel !== columns[i - 1].sublabel)
-                  .map((col) => (
-                    <div
-                      key={col.date.toISOString()}
-                      className="absolute top-0 text-xs text-gray-400 font-medium pl-1 pt-0.5"
-                      style={{ left: col.x }}
-                    >
-                      {col.sublabel}
-                    </div>
-                  ))}
-              </div>
-            )}
-
-            {/* Column cells */}
-            <div className="absolute bottom-0 left-0 right-0 flex" style={{ top: zoomLevel !== 'month' ? 24 : 0 }}>
-              {columns.map((col) => (
-                <div
-                  key={col.date.toISOString()}
-                  className={`absolute bottom-0 flex items-center justify-center border-r border-gray-200 text-xs font-medium ${
-                    col.isToday
-                      ? 'text-blue-600 bg-blue-50'
-                      : 'text-gray-500'
-                  }`}
-                  style={{
-                    left: col.x,
-                    width: col.width,
-                    top: 0,
-                  }}
-                >
-                  {col.label}
+            <div
+              className="relative"
+              style={{ width: totalWidth, height: HEADER_HEIGHT }}
+            >
+              {/* Month / Year labels at top */}
+              {zoomLevel !== 'month' && (
+                <div className="absolute top-0 left-0 right-0 h-6 flex">
+                  {columns
+                    .filter((_, i) => i === 0 || columns[i].sublabel !== columns[i - 1].sublabel)
+                    .map((col) => (
+                      <div
+                        key={col.date.toISOString()}
+                        className="absolute top-0 text-xs text-gray-400 font-medium pl-1 pt-0.5"
+                        style={{ left: col.x }}
+                      >
+                        {col.sublabel}
+                      </div>
+                    ))}
                 </div>
-              ))}
+              )}
+
+              {/* Column cells */}
+              <div className="absolute bottom-0 left-0 right-0 flex" style={{ top: zoomLevel !== 'month' ? 24 : 0 }}>
+                {columns.map((col) => (
+                  <div
+                    key={col.date.toISOString()}
+                    className={`absolute bottom-0 flex items-center justify-center border-r border-gray-200 text-xs font-medium ${
+                      col.isToday
+                        ? 'text-blue-600 bg-blue-50'
+                        : 'text-gray-500'
+                    }`}
+                    style={{
+                      left: col.x,
+                      width: col.width,
+                      top: 0,
+                    }}
+                  >
+                    {col.label}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Scrollable body */}
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-auto"
-        >
+          {/* Body */}
           <div className="relative" style={{ width: totalWidth, height: totalHeight }}>
             {/* Column grid lines */}
             {columns.map((col) => (
