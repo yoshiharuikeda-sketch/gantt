@@ -22,17 +22,13 @@ import {
   eachWeekOfInterval,
   eachMonthOfInterval,
   isToday,
-  addDays,
-  startOfWeek,
-  startOfMonth,
 } from '@/lib/utils/dateUtils'
 import type { Task } from '@/types'
 
-const ROW_HEIGHT = 36
-const HEADER_HEIGHT = 56
-const TOTAL_ROWS = 30  // minimum rows shown (Excel-like)
+const ROW_HEIGHT = 38
+const HEADER_HEIGHT = 52
+const TOTAL_ROWS = 30
 
-// Column definitions
 interface ColDef {
   label: string
   width: number
@@ -40,26 +36,24 @@ interface ColDef {
 }
 
 const COL_DEFS: Record<GanttColKey, ColDef> = {
-  name:       { label: 'タスク名', width: 180, removable: false },
+  name:       { label: 'タスク名', width: 190, removable: false },
   start_date: { label: '開始日',   width: 90,  removable: true  },
   end_date:   { label: '終了日',   width: 90,  removable: true  },
-  progress:   { label: '進捗率',   width: 80,  removable: true  },
+  progress:   { label: '進捗率',   width: 78,  removable: true  },
   updated_at: { label: '更新日',   width: 100, removable: true  },
 }
 
 const ALL_COL_KEYS: GanttColKey[] = ['name', 'start_date', 'end_date', 'progress', 'updated_at']
 
-// Helper: format date as YYYY/MM/DD
 function fmtDate(val: string | null | undefined): string {
-  if (!val) return '-'
+  if (!val) return '—'
   try {
     return format(new Date(val), 'yyyy/MM/dd')
   } catch {
-    return '-'
+    return '—'
   }
 }
 
-// API patch function
 async function patchTask(id: string, updates: Partial<Task>): Promise<Task> {
   const res = await fetch('/api/tasks', {
     method: 'PATCH',
@@ -68,6 +62,13 @@ async function patchTask(id: string, updates: Partial<Task>): Promise<Task> {
   })
   if (!res.ok) throw new Error('Failed to patch task')
   return res.json()
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  not_started: '#94A3B8',
+  in_progress: '#6366F1',
+  completed:   '#10B981',
+  blocked:     '#EF4444',
 }
 
 export default function GanttChart() {
@@ -104,13 +105,11 @@ export default function GanttChart() {
     canEdit
   )
 
-  // Left panel width = sum of visible column widths
   const leftPanelWidth = useMemo(
     () => ganttColumns.reduce((sum, key) => sum + COL_DEFS[key].width, 0),
     [ganttColumns]
   )
 
-  // Attach global mouse events for drag
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => onMouseMove(e)
     const handleMouseUp = () => onMouseUp()
@@ -122,19 +121,12 @@ export default function GanttChart() {
     }
   }, [onMouseMove, onMouseUp])
 
-  // Sync vertical scroll between left and right panels
   useEffect(() => {
     const right = scrollRef.current
     const left = leftScrollRef.current
     if (!right || !left) return
-
-    const onRightScroll = () => {
-      left.scrollTop = right.scrollTop
-    }
-    const onLeftScroll = () => {
-      right.scrollTop = left.scrollTop
-    }
-
+    const onRightScroll = () => { left.scrollTop = right.scrollTop }
+    const onLeftScroll = () => { right.scrollTop = left.scrollTop }
     right.addEventListener('scroll', onRightScroll)
     left.addEventListener('scroll', onLeftScroll)
     return () => {
@@ -143,7 +135,6 @@ export default function GanttChart() {
     }
   }, [])
 
-  // Scroll to today on mount
   useEffect(() => {
     if (!scrollRef.current) return
     const todayX = getBarX(new Date(), timelineStart, dayWidth)
@@ -151,7 +142,6 @@ export default function GanttChart() {
     scrollRef.current.scrollLeft = Math.max(0, todayX - centerOffset)
   }, [timelineStart, dayWidth])
 
-  // Close column menu on outside click
   useEffect(() => {
     if (!showColMenu) return
     const handler = (e: MouseEvent) => {
@@ -163,7 +153,6 @@ export default function GanttChart() {
     return () => window.removeEventListener('mousedown', handler)
   }, [showColMenu])
 
-  // Build column headers
   const columns = useMemo(() => {
     if (zoomLevel === 'day') {
       return eachDayOfInterval({ start: timelineStart, end: timelineEnd }).map((d) => ({
@@ -171,6 +160,7 @@ export default function GanttChart() {
         label: format(d, 'd'),
         sublabel: format(d, 'M月'),
         isToday: isToday(d),
+        isWeekend: d.getDay() === 0 || d.getDay() === 6,
         x: getBarX(d, timelineStart, dayWidth),
         width: dayWidth,
       }))
@@ -184,22 +174,22 @@ export default function GanttChart() {
         label: format(d, 'M/d'),
         sublabel: format(d, 'yyyy年M月'),
         isToday: false,
+        isWeekend: false,
         x: getBarX(d, timelineStart, dayWidth),
         width: dayWidth * 7,
       }))
     }
-    // month
     return eachMonthOfInterval({ start: timelineStart, end: timelineEnd }).map((d) => ({
       date: d,
       label: format(d, 'M月'),
       sublabel: format(d, 'yyyy年'),
       isToday: false,
+      isWeekend: false,
       x: getBarX(d, timelineStart, dayWidth),
       width: dayWidth * 30,
     }))
   }, [zoomLevel, timelineStart, timelineEnd, dayWidth])
 
-  // Group tasks by phase + empty rows
   const rows = useMemo(() => {
     const result: Array<
       | { type: 'phase'; phase: typeof phases[0] }
@@ -209,7 +199,6 @@ export default function GanttChart() {
 
     const phasedTasks = new Set<string>()
 
-    // Phases with their tasks
     for (const phase of phases) {
       const phaseTasks = tasks.filter((t) => t.phase_id === phase.id)
       if (phaseTasks.length > 0) {
@@ -221,16 +210,17 @@ export default function GanttChart() {
       }
     }
 
-    // Tasks without a phase
     const unphased = tasks.filter((t) => !phasedTasks.has(t.id))
     if (unphased.length > 0) {
-      result.push({ type: 'phase', phase: { id: '__none__', name: 'フェーズなし', color: '#94a3b8', project_id: '', display_order: 999, start_date: null, end_date: null } })
+      result.push({
+        type: 'phase',
+        phase: { id: '__none__', name: 'フェーズなし', color: '#94A3B8', project_id: '', display_order: 999, start_date: null, end_date: null },
+      })
       for (const task of unphased) {
-        result.push({ type: 'task', task, phaseColor: '#94a3b8' })
+        result.push({ type: 'task', task, phaseColor: '#94A3B8' })
       }
     }
 
-    // Pad to TOTAL_ROWS with empty rows
     const emptyCount = Math.max(0, TOTAL_ROWS - result.length)
     for (let i = 0; i < emptyCount; i++) {
       result.push({ type: 'empty', index: i })
@@ -241,18 +231,8 @@ export default function GanttChart() {
 
   const totalWidth = getBarX(timelineEnd, timelineStart, dayWidth) + dayWidth * 2
   const totalHeight = rows.length * ROW_HEIGHT
-
-  // Today line X position
   const todayX = getBarX(new Date(), timelineStart, dayWidth)
 
-  const statusColors: Record<string, string> = {
-    not_started: '#94a3b8',
-    in_progress: '#3b82f6',
-    completed: '#22c55e',
-    blocked: '#ef4444',
-  }
-
-  // Start inline editing
   const startEdit = useCallback((taskId: string, field: GanttColKey, currentVal: string) => {
     if (!canEdit) return
     if (field === 'updated_at') return
@@ -260,7 +240,6 @@ export default function GanttChart() {
     setEditValue(currentVal)
   }, [canEdit])
 
-  // Commit inline edit
   const commitEdit = useCallback(async () => {
     if (!editing) return
     const { taskId, field } = editing
@@ -279,8 +258,6 @@ export default function GanttChart() {
     }
 
     if (Object.keys(updates).length === 0) return
-
-    // Optimistic update
     updateTask(taskId, updates)
 
     try {
@@ -290,7 +267,6 @@ export default function GanttChart() {
     }
   }, [editing, editValue, updateTask])
 
-  // Create task inline from empty row
   const createTaskInline = useCallback(async (name: string) => {
     if (!currentProject || !name.trim()) return
     setInlineRow(null)
@@ -304,7 +280,6 @@ export default function GanttChart() {
     } catch { /* ignore */ }
   }, [currentProject, upsertTask])
 
-  // Get display value for a cell
   const getCellValue = (task: Task, field: GanttColKey): string => {
     switch (field) {
       case 'name':       return task.name
@@ -316,7 +291,6 @@ export default function GanttChart() {
     }
   }
 
-  // Get raw edit value for a cell
   const getRawValue = (task: Task, field: GanttColKey): string => {
     switch (field) {
       case 'name':       return task.name
@@ -328,11 +302,10 @@ export default function GanttChart() {
   }
 
   const toggleColumn = (key: GanttColKey) => {
-    if (key === 'name') return // always shown
+    if (key === 'name') return
     if (ganttColumns.includes(key)) {
       setGanttColumns(ganttColumns.filter((c) => c !== key))
     } else {
-      // Insert in original order
       const newCols = ALL_COL_KEYS.filter((k) => k === key || ganttColumns.includes(k))
       setGanttColumns(newCols)
     }
@@ -342,425 +315,556 @@ export default function GanttChart() {
 
   return (
     <>
-    <div className="h-full flex overflow-hidden select-none">
-      {/* Left panel: multi-column */}
-      <div
-        className="flex-shrink-0 border-r border-gray-200 flex flex-col bg-white z-10"
-        style={{ width: leftPanelWidth }}
-      >
-        {/* Header row */}
+      <div className="h-full flex overflow-hidden select-none" style={{ background: '#FAFBFF' }}>
+        {/* Left panel */}
         <div
-          className="border-b border-gray-200 flex items-center flex-shrink-0 bg-gray-50 relative"
-          style={{ height: HEADER_HEIGHT }}
+          className="flex-shrink-0 flex flex-col z-10"
+          style={{
+            width: leftPanelWidth,
+            background: '#FFFFFF',
+            borderRight: '1px solid #EEF2FF',
+          }}
         >
-          {ganttColumns.map((key) => {
-            const def = COL_DEFS[key]
-            return (
-              <div
-                key={key}
-                className="flex items-center justify-between px-2 border-r border-gray-200 flex-shrink-0 group"
-                style={{ width: def.width, height: '100%' }}
-              >
-                <span className="text-xs font-medium text-gray-500 truncate">{def.label}</span>
-                {def.removable && (
-                  <button
-                    onClick={() => toggleColumn(key)}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-200 transition-opacity"
-                    title={`${def.label}を非表示`}
-                  >
-                    <X className="w-3 h-3 text-gray-400" />
-                  </button>
-                )}
-              </div>
-            )
-          })}
-
-          {/* Column picker button */}
-          <div ref={colMenuRef} className="absolute right-0 top-0 bottom-0 flex items-center pr-1">
-            <button
-              onClick={() => setShowColMenu((v) => !v)}
-              className="p-1 rounded hover:bg-gray-200 transition-colors"
-              title="カラム表示設定"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-gray-500" />
-            </button>
-
-            {showColMenu && (
-              <div className="absolute top-full right-0 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
-                <p className="text-xs font-medium text-gray-500 px-3 py-1 border-b border-gray-100">表示カラム</p>
-                {ALL_COL_KEYS.map((key) => {
-                  const def = COL_DEFS[key]
-                  const checked = ganttColumns.includes(key)
-                  return (
-                    <label
-                      key={key}
-                      className={`flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-50 ${key === 'name' ? 'opacity-50' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={key === 'name'}
-                        onChange={() => toggleColumn(key)}
-                        className="w-3 h-3 accent-blue-600"
-                      />
-                      <span className="text-gray-700">{def.label}</span>
-                    </label>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Add button */}
-          {canEdit && (
-            <div className="absolute left-2 bottom-1">
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-1 px-2 py-0.5 text-xs text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                title="タスク/フェーズを追加"
-              >
-                <Plus className="w-3 h-3" />
-                追加
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Task list */}
-        <div
-          ref={leftScrollRef}
-          className="flex-1 overflow-y-auto overflow-x-hidden"
-          style={{ scrollbarWidth: 'none' }}
-        >
-          {rows.map((row, i) => {
-            // Empty row
-            if (row.type === 'empty') {
-              const isInlineEditing = inlineRow === row.index
+          {/* Header */}
+          <div
+            className="border-b flex items-center flex-shrink-0 relative"
+            style={{
+              height: HEADER_HEIGHT,
+              background: '#FAFBFF',
+              borderBottomColor: '#EEF2FF',
+            }}
+          >
+            {ganttColumns.map((key) => {
+              const def = COL_DEFS[key]
               return (
                 <div
-                  key={`empty-${row.index}`}
-                  className="flex items-center border-b border-gray-100 hover:bg-blue-50/20"
-                  style={{ height: ROW_HEIGHT, width: leftPanelWidth }}
+                  key={key}
+                  className="flex items-center justify-between px-3 flex-shrink-0 group"
+                  style={{
+                    width: def.width,
+                    height: '100%',
+                    borderRight: '1px solid #EEF2FF',
+                  }}
                 >
-                  {ganttColumns.map((key, colIdx) => {
+                  <span
+                    className="text-xs font-semibold uppercase tracking-wider"
+                    style={{ color: '#94A3B8' }}
+                  >
+                    {def.label}
+                  </span>
+                  {def.removable && (
+                    <button
+                      onClick={() => toggleColumn(key)}
+                      className="opacity-0 group-hover:opacity-100 w-4 h-4 flex items-center justify-center rounded transition-opacity"
+                      style={{ color: '#CBD5E1' }}
+                      title={`${def.label}を非表示`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+
+            {/* Column picker */}
+            <div ref={colMenuRef} className="absolute right-0 top-0 bottom-0 flex items-center pr-2">
+              <button
+                onClick={() => setShowColMenu((v) => !v)}
+                className="w-6 h-6 flex items-center justify-center rounded-md transition-colors"
+                style={{ color: '#CBD5E1' }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#64748B' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#CBD5E1' }}
+                title="カラム設定"
+              >
+                <SlidersHorizontal className="w-3 h-3" />
+              </button>
+
+              {showColMenu && (
+                <div
+                  className="absolute top-full right-0 mt-1.5 w-44 rounded-xl overflow-hidden animate-fade-in"
+                  style={{
+                    background: '#FFFFFF',
+                    border: '1px solid #EEF2FF',
+                    boxShadow: '0 8px 24px rgba(15,23,42,0.1)',
+                    zIndex: 50,
+                  }}
+                >
+                  <p
+                    className="text-xs font-semibold uppercase tracking-wider px-3 py-2"
+                    style={{ color: '#94A3B8', borderBottom: '1px solid #F1F5F9' }}
+                  >
+                    表示カラム
+                  </p>
+                  {ALL_COL_KEYS.map((key) => {
                     const def = COL_DEFS[key]
-                    if (colIdx === 0) {
-                      return (
-                        <div
-                          key={key}
-                          className="flex-shrink-0 flex items-center border-r border-gray-100 pl-8 pr-1"
-                          style={{ width: def.width, height: '100%' }}
-                          onClick={() => {
-                            if (canEdit && !isInlineEditing) setInlineRow(row.index)
-                          }}
-                        >
-                          {isInlineEditing ? (
-                            <input
-                              autoFocus
-                              type="text"
-                              className="w-full text-xs bg-blue-50 border border-blue-300 rounded px-1 py-0.5 outline-none"
-                              onBlur={(e) => {
-                                const v = e.target.value.trim()
-                                if (v) createTaskInline(v)
-                                else setInlineRow(null)
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  const target = e.target as HTMLInputElement
-                                  const v = target.value.trim()
-                                  target.value = ''
-                                  if (v) createTaskInline(v)
-                                  else setInlineRow(null)
-                                  target.blur()
-                                }
-                                if (e.key === 'Escape') {
-                                  ;(e.target as HTMLInputElement).value = ''
-                                  setInlineRow(null)
-                                }
-                              }}
-                            />
-                          ) : (
-                            <span className={canEdit ? 'w-full h-full cursor-text' : ''} />
-                          )}
-                        </div>
-                      )
-                    }
+                    const checked = ganttColumns.includes(key)
                     return (
-                      <div
+                      <label
                         key={key}
-                        className="flex-shrink-0 border-r border-gray-100"
-                        style={{ width: def.width, height: '100%' }}
-                      />
+                        className={`flex items-center gap-2.5 px-3 py-2 text-xs cursor-pointer transition-colors ${key === 'name' ? 'opacity-40' : 'hover:bg-slate-50'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={key === 'name'}
+                          onChange={() => toggleColumn(key)}
+                          className="w-3.5 h-3.5 rounded"
+                          style={{ accentColor: '#6366F1' }}
+                        />
+                        <span style={{ color: '#334155' }}>{def.label}</span>
+                      </label>
                     )
                   })}
                 </div>
-              )
-            }
+              )}
+            </div>
 
-            if (row.type === 'phase') {
-              return (
-                <div
-                  key={`phase-${row.phase.id}-${i}`}
-                  className="flex items-center bg-gray-50 border-b border-gray-100"
-                  style={{ height: ROW_HEIGHT, width: leftPanelWidth }}
+            {/* Add button */}
+            {canEdit && (
+              <div className="absolute left-3 bottom-1.5">
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium transition-colors"
+                  style={{ color: '#6366F1' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#EEF2FF' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                  title="タスク/フェーズを追加"
                 >
-                  {/* Phase row spans all columns */}
-                  <div className="flex items-center gap-2 px-4" style={{ width: leftPanelWidth }}>
-                    <div
-                      className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                      style={{ backgroundColor: row.phase.color }}
-                    />
-                    <span className="text-xs font-semibold text-gray-700 truncate">
-                      {row.phase.name}
-                    </span>
-                  </div>
-                </div>
-              )
-            }
-
-            const { task, phaseColor } = row
-            const isRowSelected = selectedTaskId === task.id
-            return (
-              <div
-                key={`task-${task.id}`}
-                className={`flex items-center border-b border-gray-100 transition-colors ${
-                  isRowSelected ? 'bg-blue-50' : 'hover:bg-blue-50'
-                }`}
-                style={{ height: ROW_HEIGHT }}
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  setContextMenu({ task, x: e.clientX, y: e.clientY })
-                }}
-              >
-                {ganttColumns.map((key, colIdx) => {
-                  const def = COL_DEFS[key]
-                  const isEditing = editing?.taskId === task.id && editing?.field === key
-                  const isEditable = canEdit && key !== 'updated_at'
-                  const isDateField = key === 'start_date' || key === 'end_date'
-
-                  return (
-                    <div
-                      key={key}
-                      className={`flex-shrink-0 flex items-center border-r border-gray-100 overflow-hidden ${
-                        colIdx === 0 ? 'pl-8' : 'px-2'
-                      } ${isEditable && !isDateField ? 'cursor-text' : isEditable && isDateField ? 'cursor-pointer' : ''}`}
-                      style={{ width: def.width, height: '100%' }}
-                      onClick={(e) => {
-                        if (!isEditable) return
-                        if (isDateField) {
-                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                          setDatePicker({ taskId: task.id, field: key as 'start_date' | 'end_date', rect })
-                        } else if (key === 'name') {
-                          setSelectedTaskId(task.id)
-                        } else {
-                          startEdit(task.id, key, getRawValue(task, key))
-                        }
-                      }}
-                      onDoubleClick={() => {
-                        if (!canEdit || key === 'updated_at' || isDateField) return
-                        startEdit(task.id, key, getRawValue(task, key))
-                      }}
-                    >
-                      {isEditing ? (
-                        <input
-                          autoFocus
-                          type={key === 'progress' ? 'number' : 'text'}
-                          min={key === 'progress' ? 0 : undefined}
-                          max={key === 'progress' ? 100 : undefined}
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onFocus={(e) => e.target.select()}
-                          onBlur={commitEdit}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') commitEdit()
-                            if (e.key === 'Escape') setEditing(null)
-                          }}
-                          className="w-full text-xs bg-white border border-blue-400 rounded px-1 outline-none"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      ) : (
-                        <>
-                          {colIdx === 0 && (
-                            <div
-                              className="w-1.5 h-1.5 rounded-full flex-shrink-0 mr-2"
-                              style={{ backgroundColor: phaseColor }}
-                            />
-                          )}
-                          <span className="text-xs text-gray-700 truncate">
-                            {getCellValue(task, key)}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Right panel: timeline */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        {/* Timeline header */}
-        <div
-          className="flex-shrink-0 bg-gray-50 border-b border-gray-200 overflow-hidden"
-          style={{ height: HEADER_HEIGHT }}
-        >
-          <div
-            className="relative"
-            style={{ width: totalWidth, height: HEADER_HEIGHT }}
-          >
-            {/* Month / Year labels at top */}
-            {zoomLevel !== 'month' && (
-              <div className="absolute top-0 left-0 right-0 h-6 flex">
-                {columns
-                  .filter((_, i) => i === 0 || columns[i].sublabel !== columns[i - 1].sublabel)
-                  .map((col) => (
-                    <div
-                      key={col.date.toISOString()}
-                      className="absolute top-0 text-xs text-gray-400 font-medium pl-1 pt-0.5"
-                      style={{ left: col.x }}
-                    >
-                      {col.sublabel}
-                    </div>
-                  ))}
+                  <Plus className="w-3 h-3" />
+                  追加
+                </button>
               </div>
             )}
-
-            {/* Column cells */}
-            <div className="absolute bottom-0 left-0 right-0 flex" style={{ top: zoomLevel !== 'month' ? 24 : 0 }}>
-              {columns.map((col) => (
-                <div
-                  key={col.date.toISOString()}
-                  className={`absolute bottom-0 flex items-center justify-center border-r border-gray-200 text-xs font-medium ${
-                    col.isToday
-                      ? 'text-blue-600 bg-blue-50'
-                      : 'text-gray-500'
-                  }`}
-                  style={{
-                    left: col.x,
-                    width: col.width,
-                    top: 0,
-                  }}
-                >
-                  {col.label}
-                </div>
-              ))}
-            </div>
           </div>
-        </div>
 
-        {/* Scrollable body */}
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-auto"
-        >
-          <div className="relative" style={{ width: totalWidth, height: totalHeight }}>
-            {/* Column grid lines */}
-            {columns.map((col) => (
-              <div
-                key={col.date.toISOString()}
-                className={`absolute top-0 bottom-0 border-r ${
-                  col.isToday ? 'border-blue-200 bg-blue-50/40' : 'border-gray-100'
-                }`}
-                style={{ left: col.x, width: col.width }}
-              />
-            ))}
-
-            {/* Row lines */}
-            {rows.map((_, i) => (
-              <div
-                key={i}
-                className="absolute left-0 right-0 border-b border-gray-100"
-                style={{ top: i * ROW_HEIGHT, height: ROW_HEIGHT }}
-              />
-            ))}
-
-            {/* Today line */}
-            <div
-              className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-10 pointer-events-none"
-              style={{ left: todayX }}
-            />
-
-            {/* Task bars */}
+          {/* Task list */}
+          <div
+            ref={leftScrollRef}
+            className="flex-1 overflow-y-auto overflow-x-hidden"
+            style={{ scrollbarWidth: 'none' }}
+          >
             {rows.map((row, i) => {
-              if (row.type === 'phase' || row.type === 'empty') return null
+              if (row.type === 'empty') {
+                const isInlineEditing = inlineRow === row.index
+                return (
+                  <div
+                    key={`empty-${row.index}`}
+                    className="flex items-center"
+                    style={{
+                      height: ROW_HEIGHT,
+                      width: leftPanelWidth,
+                      borderBottom: '1px solid #F8FAFC',
+                    }}
+                  >
+                    {ganttColumns.map((key, colIdx) => {
+                      const def = COL_DEFS[key]
+                      if (colIdx === 0) {
+                        return (
+                          <div
+                            key={key}
+                            className="flex-shrink-0 flex items-center"
+                            style={{
+                              width: def.width,
+                              height: '100%',
+                              borderRight: '1px solid #F1F5F9',
+                              paddingLeft: 28,
+                              paddingRight: 8,
+                            }}
+                            onClick={() => {
+                              if (canEdit && !isInlineEditing) setInlineRow(row.index)
+                            }}
+                          >
+                            {isInlineEditing ? (
+                              <input
+                                autoFocus
+                                type="text"
+                                className="w-full text-xs rounded-md px-2 py-1 outline-none"
+                                style={{
+                                  background: '#EEF2FF',
+                                  border: '1px solid #A5B4FC',
+                                  color: '#0F172A',
+                                }}
+                                onBlur={(e) => {
+                                  const v = e.target.value.trim()
+                                  if (v) createTaskInline(v)
+                                  else setInlineRow(null)
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    const target = e.target as HTMLInputElement
+                                    const v = target.value.trim()
+                                    target.value = ''
+                                    if (v) createTaskInline(v)
+                                    else setInlineRow(null)
+                                    target.blur()
+                                  }
+                                  if (e.key === 'Escape') {
+                                    ;(e.target as HTMLInputElement).value = ''
+                                    setInlineRow(null)
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <span className={canEdit ? 'w-full h-full cursor-text' : ''} />
+                            )}
+                          </div>
+                        )
+                      }
+                      return (
+                        <div
+                          key={key}
+                          className="flex-shrink-0"
+                          style={{
+                            width: def.width,
+                            height: '100%',
+                            borderRight: '1px solid #F1F5F9',
+                          }}
+                        />
+                      )
+                    })}
+                  </div>
+                )
+              }
+
+              if (row.type === 'phase') {
+                return (
+                  <div
+                    key={`phase-${row.phase.id}-${i}`}
+                    className="flex items-center"
+                    style={{
+                      height: ROW_HEIGHT,
+                      width: leftPanelWidth,
+                      background: 'linear-gradient(90deg, #F8FAFC, #FAFBFF)',
+                      borderBottom: '1px solid #EEF2FF',
+                      borderLeft: `3px solid ${row.phase.color}`,
+                    }}
+                  >
+                    <div className="flex items-center gap-2 px-3" style={{ width: leftPanelWidth }}>
+                      <span
+                        className="text-xs font-bold uppercase tracking-wider truncate"
+                        style={{ color: row.phase.color }}
+                      >
+                        {row.phase.name}
+                      </span>
+                    </div>
+                  </div>
+                )
+              }
+
               const { task, phaseColor } = row
-              if (!task.start_date || !task.end_date) return null
-
-              const isDragging = draggingTaskId === task.id
-              const displayStart = isDragging && ghostDates ? ghostDates.start : task.start_date
-              const displayEnd = isDragging && ghostDates ? ghostDates.end : task.end_date
-
-              const x = getBarX(displayStart, timelineStart, dayWidth)
-              const width = getBarWidth(displayStart, displayEnd, dayWidth)
-              const barColor = statusColors[task.status] ?? phaseColor
-              const top = i * ROW_HEIGHT + ROW_HEIGHT * 0.2
-              const height = ROW_HEIGHT * 0.6
-
+              const isRowSelected = selectedTaskId === task.id
               return (
                 <div
-                  key={`bar-${task.id}`}
-                  className={`absolute rounded group ${canEdit ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} hover:brightness-110 ${isDragging ? 'opacity-80 z-20' : ''}`}
+                  key={`task-${task.id}`}
+                  className="flex items-center transition-colors"
                   style={{
-                    left: x,
-                    top,
-                    width: Math.max(width, dayWidth),
-                    height,
-                    backgroundColor: barColor + '33',
-                    border: `1.5px solid ${barColor}`,
-                    transition: isDragging ? 'none' : undefined,
+                    height: ROW_HEIGHT,
+                    background: isRowSelected ? '#EEF2FF' : undefined,
+                    borderBottom: '1px solid #F8FAFC',
                   }}
-                  onMouseDown={canEdit ? (e) => onMouseDown(e, task, 'move') : undefined}
+                  onMouseEnter={(e) => { if (!isRowSelected) e.currentTarget.style.background = '#FAFBFF' }}
+                  onMouseLeave={(e) => { if (!isRowSelected) e.currentTarget.style.background = 'transparent' }}
                   onContextMenu={(e) => {
                     e.preventDefault()
-                    e.stopPropagation()
                     setContextMenu({ task, x: e.clientX, y: e.clientY })
                   }}
-                  title={`${task.name}\n${displayStart} → ${displayEnd}\n進捗: ${task.progress}%`}
                 >
-                  {/* Resize handle left */}
-                  {canEdit && (
-                    <div
-                      className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100"
-                      onMouseDown={(e) => { e.stopPropagation(); onMouseDown(e, task, 'resize-left') }}
-                    />
-                  )}
+                  {ganttColumns.map((key, colIdx) => {
+                    const def = COL_DEFS[key]
+                    const isEditing = editing?.taskId === task.id && editing?.field === key
+                    const isEditable = canEdit && key !== 'updated_at'
+                    const isDateField = key === 'start_date' || key === 'end_date'
 
-                  {/* Progress fill */}
-                  <div
-                    className="absolute left-0 top-0 bottom-0 rounded-sm"
-                    style={{
-                      width: `${task.progress}%`,
-                      backgroundColor: barColor + '88',
-                    }}
-                  />
-
-                  {/* Label */}
-                  {width > 40 && (
-                    <span
-                      className="absolute inset-0 flex items-center px-1.5 text-xs font-medium truncate pointer-events-none"
-                      style={{ color: barColor }}
-                    >
-                      {task.name}
-                    </span>
-                  )}
-
-                  {/* Resize handle right */}
-                  {canEdit && (
-                    <div
-                      className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100"
-                      onMouseDown={(e) => { e.stopPropagation(); onMouseDown(e, task, 'resize-right') }}
-                    />
-                  )}
+                    return (
+                      <div
+                        key={key}
+                        className={`flex-shrink-0 flex items-center overflow-hidden ${
+                          isEditable && !isDateField ? 'cursor-text' : isEditable && isDateField ? 'cursor-pointer' : ''
+                        }`}
+                        style={{
+                          width: def.width,
+                          height: '100%',
+                          borderRight: '1px solid #F1F5F9',
+                          paddingLeft: colIdx === 0 ? 28 : 10,
+                          paddingRight: 10,
+                        }}
+                        onClick={(e) => {
+                          if (!isEditable) return
+                          if (isDateField) {
+                            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                            setDatePicker({ taskId: task.id, field: key as 'start_date' | 'end_date', rect })
+                          } else if (key === 'name') {
+                            setSelectedTaskId(task.id)
+                          } else {
+                            startEdit(task.id, key, getRawValue(task, key))
+                          }
+                        }}
+                        onDoubleClick={() => {
+                          if (!canEdit || key === 'updated_at' || isDateField) return
+                          startEdit(task.id, key, getRawValue(task, key))
+                        }}
+                      >
+                        {isEditing ? (
+                          <input
+                            autoFocus
+                            type={key === 'progress' ? 'number' : 'text'}
+                            min={key === 'progress' ? 0 : undefined}
+                            max={key === 'progress' ? 100 : undefined}
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            onBlur={commitEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitEdit()
+                              if (e.key === 'Escape') setEditing(null)
+                            }}
+                            className="w-full text-xs rounded-md px-2 py-0.5 outline-none"
+                            style={{
+                              background: '#EEF2FF',
+                              border: '1px solid #A5B4FC',
+                              color: '#0F172A',
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <>
+                            {colIdx === 0 && (
+                              <div
+                                className="w-1.5 h-1.5 rounded-full flex-shrink-0 mr-2.5"
+                                style={{ backgroundColor: phaseColor }}
+                              />
+                            )}
+                            <span
+                              className="text-xs truncate"
+                              style={{
+                                color: key === 'updated_at' ? '#CBD5E1' : '#334155',
+                                fontWeight: colIdx === 0 ? 500 : 400,
+                              }}
+                            >
+                              {getCellValue(task, key)}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )
             })}
           </div>
         </div>
+
+        {/* Right panel: timeline */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {/* Timeline header */}
+          <div
+            className="flex-shrink-0 overflow-hidden"
+            style={{
+              height: HEADER_HEIGHT,
+              background: '#FAFBFF',
+              borderBottom: '1px solid #EEF2FF',
+            }}
+          >
+            <div className="relative" style={{ width: totalWidth, height: HEADER_HEIGHT }}>
+              {/* Month/Year labels */}
+              {zoomLevel !== 'month' && (
+                <div className="absolute top-0 left-0 right-0 h-6 flex">
+                  {columns
+                    .filter((_, i) => i === 0 || columns[i].sublabel !== columns[i - 1].sublabel)
+                    .map((col) => (
+                      <div
+                        key={col.date.toISOString()}
+                        className="absolute top-0 pl-2 pt-1 text-xs font-semibold"
+                        style={{ left: col.x, color: '#6366F1', fontSize: '11px' }}
+                      >
+                        {col.sublabel}
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {/* Day/Week/Month cells */}
+              <div
+                className="absolute left-0 right-0 flex"
+                style={{ top: zoomLevel !== 'month' ? 24 : 0, bottom: 0 }}
+              >
+                {columns.map((col) => (
+                  <div
+                    key={col.date.toISOString()}
+                    className="absolute bottom-0 flex items-center justify-center text-xs font-medium"
+                    style={{
+                      left: col.x,
+                      width: col.width,
+                      top: 0,
+                      borderRight: '1px solid #EEF2FF',
+                      background: col.isToday
+                        ? 'rgba(99,102,241,0.08)'
+                        : (col as { isWeekend?: boolean }).isWeekend
+                        ? 'rgba(148,163,184,0.04)'
+                        : 'transparent',
+                      color: col.isToday ? '#6366F1' : '#94A3B8',
+                      fontWeight: col.isToday ? 700 : 400,
+                    }}
+                  >
+                    {col.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Scrollable body */}
+          <div ref={scrollRef} className="flex-1 overflow-auto">
+            <div className="relative" style={{ width: totalWidth, height: totalHeight }}>
+              {/* Column grid lines */}
+              {columns.map((col) => (
+                <div
+                  key={col.date.toISOString()}
+                  className="absolute top-0 bottom-0"
+                  style={{
+                    left: col.x,
+                    width: col.width,
+                    borderRight: '1px solid #F1F5F9',
+                    background: col.isToday
+                      ? 'rgba(99,102,241,0.04)'
+                      : (col as { isWeekend?: boolean }).isWeekend
+                      ? 'rgba(148,163,184,0.025)'
+                      : 'transparent',
+                  }}
+                />
+              ))}
+
+              {/* Row separators */}
+              {rows.map((_, i) => (
+                <div
+                  key={i}
+                  className="absolute left-0 right-0"
+                  style={{
+                    top: i * ROW_HEIGHT,
+                    height: ROW_HEIGHT,
+                    borderBottom: '1px solid #F8FAFC',
+                  }}
+                />
+              ))}
+
+              {/* Today line */}
+              <div
+                className="absolute top-0 bottom-0 pointer-events-none"
+                style={{
+                  left: todayX,
+                  width: 2,
+                  background: 'linear-gradient(180deg, #6366F1 0%, rgba(99,102,241,0.3) 100%)',
+                  zIndex: 10,
+                }}
+              />
+
+              {/* Today dot at top */}
+              <div
+                className="absolute pointer-events-none"
+                style={{
+                  left: todayX - 4,
+                  top: -1,
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: '#6366F1',
+                  zIndex: 11,
+                }}
+              />
+
+              {/* Task bars */}
+              {rows.map((row, i) => {
+                if (row.type === 'phase' || row.type === 'empty') return null
+                const { task, phaseColor } = row
+                if (!task.start_date || !task.end_date) return null
+
+                const isDragging = draggingTaskId === task.id
+                const displayStart = isDragging && ghostDates ? ghostDates.start : task.start_date
+                const displayEnd = isDragging && ghostDates ? ghostDates.end : task.end_date
+
+                const x = getBarX(displayStart, timelineStart, dayWidth)
+                const width = getBarWidth(displayStart, displayEnd, dayWidth)
+                const barColor = STATUS_COLORS[task.status] ?? phaseColor
+                const barHeight = 22
+                const top = i * ROW_HEIGHT + (ROW_HEIGHT - barHeight) / 2
+
+                return (
+                  <div
+                    key={`bar-${task.id}`}
+                    className={`absolute group ${canEdit ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${isDragging ? 'opacity-70 z-20' : ''}`}
+                    style={{
+                      left: x,
+                      top,
+                      width: Math.max(width, dayWidth),
+                      height: barHeight,
+                      borderRadius: 6,
+                      background: `linear-gradient(135deg, ${barColor}dd, ${barColor}aa)`,
+                      border: `1px solid ${barColor}`,
+                      boxShadow: isDragging
+                        ? `0 4px 12px ${barColor}55`
+                        : `0 1px 3px ${barColor}33`,
+                      transition: isDragging ? 'none' : 'box-shadow 150ms, filter 150ms',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isDragging) {
+                        e.currentTarget.style.filter = 'brightness(1.1)'
+                        e.currentTarget.style.boxShadow = `0 3px 8px ${barColor}55`
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.filter = 'brightness(1)'
+                      e.currentTarget.style.boxShadow = `0 1px 3px ${barColor}33`
+                    }}
+                    onMouseDown={canEdit ? (e) => onMouseDown(e, task, 'move') : undefined}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setContextMenu({ task, x: e.clientX, y: e.clientY })
+                    }}
+                    title={`${task.name}\n${displayStart} → ${displayEnd}\n進捗: ${task.progress}%`}
+                  >
+                    {/* Resize handle left */}
+                    {canEdit && (
+                      <div
+                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                        onMouseDown={(e) => { e.stopPropagation(); onMouseDown(e, task, 'resize-left') }}
+                      />
+                    )}
+
+                    {/* Progress fill */}
+                    <div
+                      className="absolute left-0 top-0 bottom-0 rounded-l"
+                      style={{
+                        width: `${task.progress}%`,
+                        background: 'rgba(255,255,255,0.25)',
+                        borderRadius: task.progress >= 100 ? 5 : undefined,
+                      }}
+                    />
+
+                    {/* Label */}
+                    {width > 36 && (
+                      <span
+                        className="absolute inset-0 flex items-center px-2 text-xs font-semibold truncate pointer-events-none"
+                        style={{ color: 'rgba(255,255,255,0.95)', fontSize: '11px' }}
+                      >
+                        {task.name}
+                      </span>
+                    )}
+
+                    {/* Resize handle right */}
+                    {canEdit && (
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                        onMouseDown={(e) => { e.stopPropagation(); onMouseDown(e, task, 'resize-right') }}
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
 
       {showAddModal && <AddTaskModal onClose={() => setShowAddModal(false)} />}
       {contextMenu && (

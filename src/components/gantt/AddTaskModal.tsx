@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Plus } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useTaskStore } from '@/store/taskStore'
 import { useProjectStore } from '@/store/projectStore'
 import type { Task, Phase } from '@/types'
@@ -12,32 +12,40 @@ interface AddTaskModalProps {
 }
 
 const PHASE_COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b',
-  '#10b981', '#3b82f6', '#ef4444', '#14b8a6',
+  '#6366F1', '#8B5CF6', '#EC4899', '#F59E0B',
+  '#10B981', '#3B82F6', '#EF4444', '#14B8A6',
 ]
 
 export default function AddTaskModal({ onClose }: AddTaskModalProps) {
   const { phases, upsertTask, upsertPhase } = useTaskStore()
-  const { currentProject } = useProjectStore()
+  const { currentProject, members } = useProjectStore()
 
   const [tab, setTab] = useState<'task' | 'phase'>('task')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Task form
   const [taskName, setTaskName] = useState('')
   const [taskPhaseId, setTaskPhaseId] = useState<string>('')
   const [taskStartDate, setTaskStartDate] = useState('')
   const [taskEndDate, setTaskEndDate] = useState('')
   const [taskAssigneeId, setTaskAssigneeId] = useState<string>('')
 
-  // Phase form
   const [phaseName, setPhaseName] = useState('')
   const [phaseColor, setPhaseColor] = useState(PHASE_COLORS[0])
   const [phaseStartDate, setPhaseStartDate] = useState('')
   const [phaseEndDate, setPhaseEndDate] = useState('')
 
-  const { members } = useProjectStore()
+  const inputStyle = {
+    width: '100%',
+    padding: '8px 12px',
+    borderRadius: 10,
+    border: '1.5px solid #E2E8F0',
+    fontSize: '13px',
+    color: '#0F172A',
+    background: '#FAFBFF',
+    outline: 'none',
+    transition: 'border-color 150ms, box-shadow 150ms',
+  }
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -109,65 +117,100 @@ export default function AddTaskModal({ onClose }: AddTaskModalProps) {
   }
 
   const modal = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-            <button
-              onClick={() => setTab('task')}
-              className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
-                tab === 'task' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
-              }`}
-            >
-              タスク追加
-            </button>
-            <button
-              onClick={() => setTab('phase')}
-              className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
-                tab === 'phase' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
-              }`}
-            >
-              フェーズ追加
-            </button>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        className="w-full max-w-md mx-4 rounded-2xl animate-slide-up"
+        style={{
+          background: '#FFFFFF',
+          boxShadow: '0 24px 64px rgba(15,23,42,0.2)',
+        }}
+      >
+        {/* Header with tabs */}
+        <div
+          className="flex items-center justify-between px-5 py-4"
+          style={{ borderBottom: '1px solid #F1F5F9' }}
+        >
+          <div
+            className="flex items-center rounded-xl p-1"
+            style={{ background: '#F1F5F9' }}
+          >
+            {[
+              { key: 'task' as const, label: 'タスク追加' },
+              { key: 'phase' as const, label: 'フェーズ追加' },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => { setTab(key); setError(null) }}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                style={
+                  tab === key
+                    ? { background: '#FFFFFF', color: '#0F172A', boxShadow: '0 1px 3px rgba(15,23,42,0.08)' }
+                    : { color: '#94A3B8' }
+                }
+              >
+                {label}
+              </button>
+            ))}
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+            className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
+            style={{ color: '#94A3B8' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#64748B' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94A3B8' }}
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="px-5 py-4">
+        <div className="px-5 py-5">
           {error && (
-            <p className="mb-3 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+            <div
+              className="mb-4 px-4 py-3 rounded-xl text-sm"
+              style={{
+                background: 'rgba(239,68,68,0.06)',
+                border: '1px solid rgba(239,68,68,0.2)',
+                color: '#EF4444',
+              }}
+            >
+              {error}
+            </div>
           )}
 
           {tab === 'task' ? (
-            <form onSubmit={handleAddTask} className="space-y-3">
+            <form onSubmit={handleAddTask} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  タスク名 <span className="text-red-500">*</span>
+                <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#64748B' }}>
+                  タスク名 <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="text"
                   value={taskName}
                   onChange={(e) => setTaskName(e.target.value)}
                   placeholder="タスク名を入力"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={inputStyle}
+                  onFocus={(e) => { e.currentTarget.style.border = '1.5px solid #6366F1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)' }}
+                  onBlur={(e) => { e.currentTarget.style.border = '1.5px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                   autoFocus
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">フェーズ</label>
+                <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#64748B' }}>
+                  フェーズ
+                </label>
                 <select
                   value={taskPhaseId}
                   onChange={(e) => setTaskPhaseId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={inputStyle}
+                  onFocus={(e) => { e.currentTarget.style.border = '1.5px solid #6366F1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)' }}
+                  onBlur={(e) => { e.currentTarget.style.border = '1.5px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                 >
                   <option value="">なし</option>
                   {phases.map((p) => (
@@ -178,32 +221,44 @@ export default function AddTaskModal({ onClose }: AddTaskModalProps) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">開始日</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#64748B' }}>
+                    開始日
+                  </label>
                   <input
                     type="date"
                     value={taskStartDate}
                     onChange={(e) => setTaskStartDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    style={inputStyle}
+                    onFocus={(e) => { e.currentTarget.style.border = '1.5px solid #6366F1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)' }}
+                    onBlur={(e) => { e.currentTarget.style.border = '1.5px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">終了日</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#64748B' }}>
+                    終了日
+                  </label>
                   <input
                     type="date"
                     value={taskEndDate}
                     onChange={(e) => setTaskEndDate(e.target.value)}
                     min={taskStartDate}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    style={inputStyle}
+                    onFocus={(e) => { e.currentTarget.style.border = '1.5px solid #6366F1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)' }}
+                    onBlur={(e) => { e.currentTarget.style.border = '1.5px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">担当者</label>
+                <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#64748B' }}>
+                  担当者
+                </label>
                 <select
                   value={taskAssigneeId}
                   onChange={(e) => setTaskAssigneeId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={inputStyle}
+                  onFocus={(e) => { e.currentTarget.style.border = '1.5px solid #6366F1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)' }}
+                  onBlur={(e) => { e.currentTarget.style.border = '1.5px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                 >
                   <option value="">未割り当て</option>
                   {members.map((m) => (
@@ -214,53 +269,66 @@ export default function AddTaskModal({ onClose }: AddTaskModalProps) {
                 </select>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex gap-3 pt-1">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
+                  style={{ border: '1.5px solid #E2E8F0', color: '#64748B', background: 'transparent' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#F8FAFC' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                 >
                   キャンセル
                 </button>
                 <button
                   type="submit"
                   disabled={loading || !taskName.trim()}
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all"
+                  style={{
+                    background: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+                    boxShadow: '0 2px 8px rgba(99,102,241,0.3)',
+                    opacity: loading || !taskName.trim() ? 0.6 : 1,
+                  }}
                 >
-                  <Plus className="w-4 h-4" />
-                  {loading ? '作成中...' : 'タスク追加'}
+                  {loading ? '作成中...' : 'タスクを追加'}
                 </button>
               </div>
             </form>
           ) : (
-            <form onSubmit={handleAddPhase} className="space-y-3">
+            <form onSubmit={handleAddPhase} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  フェーズ名 <span className="text-red-500">*</span>
+                <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#64748B' }}>
+                  フェーズ名 <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="text"
                   value={phaseName}
                   onChange={(e) => setPhaseName(e.target.value)}
                   placeholder="フェーズ名を入力"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={inputStyle}
+                  onFocus={(e) => { e.currentTarget.style.border = '1.5px solid #6366F1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)' }}
+                  onBlur={(e) => { e.currentTarget.style.border = '1.5px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                   autoFocus
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">カラー</label>
-                <div className="flex gap-2 flex-wrap">
+                <label className="block text-xs font-semibold uppercase tracking-wide mb-2.5" style={{ color: '#64748B' }}>
+                  カラー
+                </label>
+                <div className="flex gap-2.5">
                   {PHASE_COLORS.map((c) => (
                     <button
                       key={c}
                       type="button"
                       onClick={() => setPhaseColor(c)}
-                      className={`w-7 h-7 rounded-full transition-all ${
-                        phaseColor === c ? 'ring-2 ring-offset-2 ring-gray-400 scale-110' : ''
-                      }`}
-                      style={{ backgroundColor: c }}
+                      className="w-8 h-8 rounded-full transition-all"
+                      style={{
+                        backgroundColor: c,
+                        transform: phaseColor === c ? 'scale(1.15)' : 'scale(1)',
+                        boxShadow: phaseColor === c ? `0 0 0 2px white, 0 0 0 4px ${c}` : 'none',
+                      }}
                     />
                   ))}
                 </div>
@@ -268,41 +336,56 @@ export default function AddTaskModal({ onClose }: AddTaskModalProps) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">開始日</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#64748B' }}>
+                    開始日
+                  </label>
                   <input
                     type="date"
                     value={phaseStartDate}
                     onChange={(e) => setPhaseStartDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    style={inputStyle}
+                    onFocus={(e) => { e.currentTarget.style.border = '1.5px solid #6366F1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)' }}
+                    onBlur={(e) => { e.currentTarget.style.border = '1.5px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">終了日</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#64748B' }}>
+                    終了日
+                  </label>
                   <input
                     type="date"
                     value={phaseEndDate}
                     onChange={(e) => setPhaseEndDate(e.target.value)}
                     min={phaseStartDate}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    style={inputStyle}
+                    onFocus={(e) => { e.currentTarget.style.border = '1.5px solid #6366F1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)' }}
+                    onBlur={(e) => { e.currentTarget.style.border = '1.5px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex gap-3 pt-1">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
+                  style={{ border: '1.5px solid #E2E8F0', color: '#64748B', background: 'transparent' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#F8FAFC' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                 >
                   キャンセル
                 </button>
                 <button
                   type="submit"
                   disabled={loading || !phaseName.trim()}
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all"
+                  style={{
+                    background: `linear-gradient(135deg, ${phaseColor}, ${phaseColor}cc)`,
+                    boxShadow: `0 2px 8px ${phaseColor}44`,
+                    opacity: loading || !phaseName.trim() ? 0.6 : 1,
+                  }}
                 >
-                  <Plus className="w-4 h-4" />
-                  {loading ? '作成中...' : 'フェーズ追加'}
+                  {loading ? '作成中...' : 'フェーズを追加'}
                 </button>
               </div>
             </form>

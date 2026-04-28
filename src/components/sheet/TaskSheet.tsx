@@ -8,15 +8,13 @@ import type { Phase, Task } from '@/types'
 import { Plus, X, GripVertical, Trash2 } from 'lucide-react'
 import DatePickerPopup from '@/components/ui/DatePickerPopup'
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-const TOTAL_ROWS = 50   // Excel-like: always show this many rows
+const TOTAL_ROWS = 50
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 type EditingCell = { rowId: string; field: string }
 
 const PHASE_COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b',
-  '#10b981', '#3b82f6', '#ef4444', '#14b8a6',
+  '#6366F1', '#8B5CF6', '#EC4899', '#F59E0B',
+  '#10B981', '#3B82F6', '#EF4444', '#14B8A6',
 ]
 
 function fmtDate(iso: string | null | undefined): string {
@@ -57,21 +55,39 @@ function AddPhaseModal({ projectId, onClose }: { projectId: string; onClose: () 
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h3 className="text-sm font-semibold text-gray-900">フェーズ追加</h3>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded">
-            <X className="w-4 h-4" />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        className="w-full max-w-sm mx-4 rounded-2xl animate-slide-up"
+        style={{ background: '#FFFFFF', boxShadow: '0 24px 64px rgba(15,23,42,0.2)' }}
+      >
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #F1F5F9' }}>
+          <h3 className="text-sm font-semibold" style={{ color: '#0F172A' }}>フェーズを追加</h3>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
+            style={{ color: '#94A3B8' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#F1F5F9' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+          >
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {error && (
-            <p className="text-xs text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">{error}</p>
+            <div
+              className="px-4 py-3 rounded-xl text-xs"
+              style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444' }}
+            >
+              {error}
+            </div>
           )}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              フェーズ名 <span className="text-red-500">*</span>
+            <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#64748B' }}>
+              フェーズ名 <span style={{ color: '#EF4444' }}>*</span>
             </label>
             <input
               type="text"
@@ -80,30 +96,51 @@ function AddPhaseModal({ projectId, onClose }: { projectId: string; onClose: () 
               autoFocus
               required
               placeholder="例: 設計フェーズ"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none transition-all"
+              style={{ border: '1.5px solid #E2E8F0', color: '#0F172A', background: '#FAFBFF' }}
+              onFocus={(e) => { e.currentTarget.style.border = '1.5px solid #6366F1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)' }}
+              onBlur={(e) => { e.currentTarget.style.border = '1.5px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-2">カラー</label>
-            <div className="flex gap-2 flex-wrap">
+            <label className="block text-xs font-semibold uppercase tracking-wide mb-2.5" style={{ color: '#64748B' }}>カラー</label>
+            <div className="flex gap-2.5">
               {PHASE_COLORS.map((c) => (
                 <button
                   key={c}
                   type="button"
                   onClick={() => setColor(c)}
-                  className="w-7 h-7 rounded-full transition-all hover:scale-110"
-                  style={{ backgroundColor: c, outline: color === c ? `3px solid ${c}` : 'none', outlineOffset: '2px' }}
+                  className="w-7 h-7 rounded-full transition-all"
+                  style={{
+                    backgroundColor: c,
+                    transform: color === c ? 'scale(1.15)' : 'scale(1)',
+                    boxShadow: color === c ? `0 0 0 2px white, 0 0 0 4px ${c}` : 'none',
+                  }}
                 />
               ))}
             </div>
           </div>
-          <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose}
-              className="flex-1 px-3 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+          <div className="flex gap-2.5 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-3 py-2.5 text-sm font-medium rounded-xl transition-all"
+              style={{ border: '1.5px solid #E2E8F0', color: '#64748B', background: 'transparent' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#F8FAFC' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
               キャンセル
             </button>
-            <button type="submit" disabled={loading || !name.trim()}
-              className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+            <button
+              type="submit"
+              disabled={loading || !name.trim()}
+              className="flex-1 px-3 py-2.5 text-sm font-semibold text-white rounded-xl transition-all"
+              style={{
+                background: `linear-gradient(135deg, ${color}, ${color}cc)`,
+                boxShadow: `0 2px 8px ${color}44`,
+                opacity: loading || !name.trim() ? 0.6 : 1,
+              }}
+            >
               {loading ? '作成中...' : '作成'}
             </button>
           </div>
@@ -155,7 +192,6 @@ function EditableNameCell({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onFocus={(e) => {
-          // ダブルクリック時は全選択、キー入力時は末尾にカーソル
           if (initialChar == null) e.target.select()
         }}
         onBlur={() => onCommit(draft)}
@@ -163,7 +199,8 @@ function EditableNameCell({
           if (e.key === 'Escape') { onCancel(); return }
           onKeyDown?.(e)
         }}
-        className="w-full px-2 py-2 text-xs text-gray-900 bg-blue-50 border-0 outline-none focus:bg-blue-50"
+        className="w-full px-3 py-2 text-xs border-0 outline-none"
+        style={{ background: '#EEF2FF', color: '#0F172A' }}
         placeholder={placeholder}
         autoComplete="off"
       />
@@ -174,41 +211,31 @@ function EditableNameCell({
     <div
       onClick={(e) => { e.stopPropagation(); onSingleClick(e) }}
       onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(e) }}
-      className="px-2 py-2 text-xs text-gray-800 cursor-default select-text min-h-[34px] flex items-center"
+      className="px-3 py-2 text-xs cursor-default select-text min-h-[34px] flex items-center"
+      style={{ color: '#334155' }}
     >
-      {value || <span className="text-gray-300 text-xs">{placeholder ?? ''}</span>}
+      {value || <span style={{ color: '#CBD5E1', fontSize: '11px' }}>{placeholder ?? ''}</span>}
     </div>
   )
 }
 
 // ─── Date Cell ────────────────────────────────────────────────────────────────
-function DateCell({
-  value,
-  canEdit,
-  onOpen,
-}: {
-  value: string | null
-  canEdit: boolean
-  onOpen: (rect: DOMRect) => void
-}) {
+function DateCell({ value, canEdit, onOpen }: { value: string | null; canEdit: boolean; onOpen: (rect: DOMRect) => void }) {
   const ref = useRef<HTMLDivElement>(null)
-
-  const handleClick = () => {
-    if (!canEdit) return
-    if (ref.current) {
-      onOpen(ref.current.getBoundingClientRect())
-    }
-  }
 
   return (
     <div
       ref={ref}
-      onClick={handleClick}
-      className={`px-2 py-2 text-xs min-h-[34px] flex items-center ${
-        canEdit ? 'cursor-pointer hover:bg-blue-50/40' : ''
-      } ${value ? 'text-gray-800' : 'text-gray-300'}`}
+      onClick={() => { if (canEdit && ref.current) onOpen(ref.current.getBoundingClientRect()) }}
+      className="px-3 py-2 text-xs min-h-[34px] flex items-center transition-colors"
+      style={{
+        cursor: canEdit ? 'pointer' : 'default',
+        color: value ? '#334155' : '#CBD5E1',
+      }}
+      onMouseEnter={(e) => { if (canEdit) e.currentTarget.style.background = '#F1F5F9' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
     >
-      {value ? fmtDate(value) : '-'}
+      {value ? fmtDate(value) : '—'}
     </div>
   )
 }
@@ -235,6 +262,9 @@ function ProgressCell({
     if (isEditing) setDraft(String(value))
   }, [isEditing, value])
 
+  const pct = Math.min(100, Math.max(0, value))
+  const barColor = pct === 100 ? '#10B981' : pct > 50 ? '#6366F1' : pct > 0 ? '#F59E0B' : '#E2E8F0'
+
   if (isEditing) {
     return (
       <input
@@ -251,7 +281,8 @@ function ProgressCell({
           if (e.key === 'Escape') { onCommit(value); return }
           onKeyDown?.(e)
         }}
-        className="w-full px-2 py-2 text-xs text-gray-900 bg-blue-50 border-0 outline-none"
+        className="w-full px-3 py-2 text-xs border-0 outline-none"
+        style={{ background: '#EEF2FF', color: '#0F172A' }}
       />
     )
   }
@@ -259,12 +290,22 @@ function ProgressCell({
   return (
     <div
       onClick={onStartEdit}
-      className="px-2 py-2 cursor-text hover:bg-blue-50/40 flex items-center gap-1.5 min-h-[34px]"
+      className="px-3 py-2 cursor-text flex items-center gap-2 min-h-[34px] transition-colors"
+      onMouseEnter={(e) => { e.currentTarget.style.background = '#F8FAFC' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
     >
-      <div className="flex-1 bg-gray-200 rounded-full h-1">
-        <div className="bg-blue-500 h-1 rounded-full" style={{ width: `${value}%` }} />
+      <div className="flex-1 rounded-full overflow-hidden" style={{ height: 4, background: '#E2E8F0' }}>
+        <div
+          className="h-full rounded-full transition-all duration-300"
+          style={{ width: `${pct}%`, background: barColor }}
+        />
       </div>
-      <span className="text-xs text-gray-600 w-8 text-right tabular-nums flex-shrink-0">{value}%</span>
+      <span
+        className="text-xs tabular-nums flex-shrink-0 font-medium"
+        style={{ color: barColor === '#E2E8F0' ? '#94A3B8' : barColor, fontSize: '11px', minWidth: 28, textAlign: 'right' }}
+      >
+        {pct}%
+      </span>
     </div>
   )
 }
@@ -280,18 +321,15 @@ export default function TaskSheet() {
   const inputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map())
   const tableRef = useRef<HTMLDivElement>(null)
 
-  // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null)
 
-  // Date picker state
   const [datePicker, setDatePicker] = useState<{
     taskId: string
     field: 'start_date' | 'end_date'
     rect: DOMRect
   } | null>(null)
 
-  // Drag-to-reorder state
   const dragIdRef = useRef<string | null>(null)
   const [dropTarget, setDropTarget] = useState<{ id: string; pos: 'above' | 'below' } | null>(null)
 
@@ -300,23 +338,19 @@ export default function TaskSheet() {
   const EDITABLE_COLS = ['name', 'start_date', 'end_date', 'progress'] as const
   type EditableCol = typeof EDITABLE_COLS[number]
 
-  // ── Focus input after render ──────────────────────────────────────────────
   useEffect(() => {
     if (editing) {
       const key = `${editing.rowId}-${editing.field}`
       const el = inputRefs.current.get(key)
       if (el) {
         el.focus()
-        if (editingInitialChar != null) {
-          // typed a char — cursor at end
-        } else if (el.type !== 'date' && el.type !== 'number') {
+        if (editingInitialChar == null && el.type !== 'date' && el.type !== 'number') {
           el.select()
         }
       }
     }
   }, [editing, editingInitialChar])
 
-  // ── PATCH existing task ──────────────────────────────────────────────────
   const patchTask = useCallback(async (taskId: string, field: string, value: unknown) => {
     const task = tasks.find(t => t.id === taskId)
     if (!task) return
@@ -334,18 +368,14 @@ export default function TaskSheet() {
     }
   }, [tasks, upsertTask])
 
-  // ── DELETE task ──────────────────────────────────────────────────────────
   const deleteTask = useCallback(async (taskId: string) => {
     removeTask(taskId)
     setSelectedIds(prev => { const n = new Set(prev); n.delete(taskId); return n })
     try {
       await fetch(`/api/tasks?id=${taskId}`, { method: 'DELETE' })
-    } catch {
-      // rollback handled by realtime
-    }
+    } catch { /* ignore */ }
   }, [removeTask])
 
-  // ── DELETE selected tasks ────────────────────────────────────────────────
   const deleteSelected = useCallback(async () => {
     const ids = Array.from(selectedIds)
     ids.forEach(id => removeTask(id))
@@ -358,7 +388,6 @@ export default function TaskSheet() {
     }
   }, [selectedIds, removeTask])
 
-  // ── POST new task from an empty row ─────────────────────────────────────
   const createTask = useCallback(async (rowIndex: number, name: string) => {
     if (!currentProject || !name.trim()) {
       setPendingRows(prev => { const n = { ...prev }; delete n[rowIndex]; return n })
@@ -375,7 +404,6 @@ export default function TaskSheet() {
     } catch { /* ignore */ }
   }, [currentProject, upsertTask])
 
-  // ── Keyboard nav (Tab/Enter) for editing ─────────────────────────────────
   const handleEditKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>, rowId: string, field: EditableCol) => {
       if (e.key !== 'Enter' && e.key !== 'Tab') return
@@ -405,10 +433,7 @@ export default function TaskSheet() {
     if (!task) return
     if (field === 'name') {
       const newName = String(value).trim()
-      if (!newName) {
-        deleteTask(rowId)
-        return
-      }
+      if (!newName) { deleteTask(rowId); return }
     }
     const current = task[field as keyof typeof task]
     if (current !== value) patchTask(rowId, field, value === '' ? null : value)
@@ -426,22 +451,17 @@ export default function TaskSheet() {
     }
   }
 
-  // ── Row selection helpers ─────────────────────────────────────────────────
   const handleRowClick = (e: React.MouseEvent, taskId: string) => {
-    if (editing) return // don't interfere with editing
-
+    if (editing) return
     if (e.shiftKey && lastSelectedId) {
-      // Range select
       const ids = tasks.map(t => t.id)
       const startIdx = ids.indexOf(lastSelectedId)
       const endIdx = ids.indexOf(taskId)
       if (startIdx !== -1 && endIdx !== -1) {
         const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx]
-        const rangeIds = ids.slice(from, to + 1)
-        setSelectedIds(new Set(rangeIds))
+        setSelectedIds(new Set(ids.slice(from, to + 1)))
       }
     } else if (e.ctrlKey || e.metaKey) {
-      // Toggle
       setSelectedIds(prev => {
         const n = new Set(prev)
         if (n.has(taskId)) n.delete(taskId)
@@ -450,28 +470,21 @@ export default function TaskSheet() {
       })
       setLastSelectedId(taskId)
     } else {
-      // Single select
       setSelectedIds(new Set([taskId]))
       setLastSelectedId(taskId)
     }
-
     tableRef.current?.focus()
   }
 
-  // ── Table-level keydown (when table has focus) ────────────────────────────
   const handleTableKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (editing) return
-
     if (e.key === 'Escape') {
       setSelectedIds(new Set())
       setLastSelectedId(null)
       return
     }
-
     if (selectedIds.size === 0) return
-
     const taskIds = tasks.map(t => t.id)
-
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
       const currentId = lastSelectedId ?? Array.from(selectedIds)[0]
@@ -484,29 +497,18 @@ export default function TaskSheet() {
       }
       return
     }
-
     if (e.key === 'F2') {
       e.preventDefault()
       const currentId = lastSelectedId ?? Array.from(selectedIds)[0]
       if (currentId) startEdit(currentId, 'name')
       return
     }
-
-    // Printable key → start edit with that char
-    if (
-      e.key.length === 1 &&
-      !e.ctrlKey &&
-      !e.metaKey &&
-      !e.altKey
-    ) {
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const currentId = lastSelectedId ?? Array.from(selectedIds)[0]
-      if (currentId) {
-        startEdit(currentId, 'name', e.key)
-      }
+      if (currentId) startEdit(currentId, 'name', e.key)
     }
   }
 
-  // ── Drag handlers ─────────────────────────────────────────────────────────
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     dragIdRef.current = taskId
     e.dataTransfer.effectAllowed = 'move'
@@ -516,32 +518,25 @@ export default function TaskSheet() {
     e.preventDefault()
     const target = e.currentTarget as HTMLElement
     const rect = target.getBoundingClientRect()
-    const midY = rect.top + rect.height / 2
-    const pos: 'above' | 'below' = e.clientY < midY ? 'above' : 'below'
+    const pos: 'above' | 'below' = e.clientY < rect.top + rect.height / 2 ? 'above' : 'below'
     setDropTarget({ id: taskId, pos })
   }
 
   const handleDrop = (e: React.DragEvent, dropTaskId: string | null) => {
     e.preventDefault()
     const dragId = dragIdRef.current
-    if (!dragId || !currentProject) {
-      setDropTarget(null)
-      return
-    }
+    if (!dragId || !currentProject) { setDropTarget(null); return }
 
     const ids = tasks.map(t => t.id)
     const dragIdx = ids.indexOf(dragId)
     if (dragIdx === -1) { setDropTarget(null); return }
 
     let newIds: string[]
-
     if (dropTaskId === null) {
-      // Dropped in empty space — move to end
       newIds = [...ids.filter(id => id !== dragId), dragId]
     } else {
       const dropIdx = ids.indexOf(dropTaskId)
       if (dropIdx === -1 || dragId === dropTaskId) { setDropTarget(null); return }
-
       const pos = dropTarget?.pos ?? 'below'
       const filtered = ids.filter(id => id !== dragId)
       const insertAt = filtered.indexOf(dropTaskId) + (pos === 'below' ? 1 : 0)
@@ -550,13 +545,11 @@ export default function TaskSheet() {
     }
 
     reorderTasks(newIds)
-
-    // Persist
     fetch('/api/tasks/reorder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ project_id: currentProject.id, task_ids: newIds }),
-    }).catch(() => { /* optimistic, ignore errors */ })
+    }).catch(() => {})
 
     setDropTarget(null)
     dragIdRef.current = null
@@ -567,25 +560,48 @@ export default function TaskSheet() {
     setDropTarget(null)
   }
 
-  // ── Build row list: tasks + empty rows up to TOTAL_ROWS ──────────────────
   const emptyCount = Math.max(0, TOTAL_ROWS - tasks.length)
   const emptyRows = Array.from({ length: emptyCount }, (_, i) => tasks.length + i)
 
-  // ─── Render ──────────────────────────────────────────────────────────────
+  const thStyle: React.CSSProperties = {
+    padding: '10px 12px',
+    fontSize: '11px',
+    fontWeight: 600,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+    color: '#64748B',
+    background: '#F8FAFC',
+    borderBottom: '1px solid #E2E8F0',
+    borderRight: '1px solid #E2E8F0',
+    whiteSpace: 'nowrap',
+    userSelect: 'none',
+  }
+
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col" style={{ background: '#FFFFFF' }}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">{tasks.length} タスク</span>
+      <div
+        className="flex items-center justify-between px-4 py-2.5 flex-shrink-0"
+        style={{ borderBottom: '1px solid #EEF2FF', background: '#FAFBFF' }}
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="text-xs" style={{ color: '#94A3B8' }}>
+            {tasks.length} タスク
+          </span>
           {selectedIds.size > 0 && (
             <>
-              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+              <span
+                className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                style={{ background: '#EEF2FF', color: '#6366F1' }}
+              >
                 {selectedIds.size}件選択中
               </span>
               <button
                 onClick={deleteSelected}
-                className="flex items-center gap-1 px-2 py-1 text-xs text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors"
+                style={{ color: '#EF4444', border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.04)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.04)' }}
               >
                 <Trash2 className="w-3 h-3" />
                 削除
@@ -596,7 +612,20 @@ export default function TaskSheet() {
         {canEdit && (
           <button
             onClick={() => setShowPhaseModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+            style={{
+              color: '#6366F1',
+              border: '1px solid rgba(99,102,241,0.25)',
+              background: 'rgba(99,102,241,0.04)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(99,102,241,0.08)'
+              e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(99,102,241,0.04)'
+              e.currentTarget.style.borderColor = 'rgba(99,102,241,0.25)'
+            }}
           >
             <Plus className="w-3.5 h-3.5" />
             フェーズ追加
@@ -612,63 +641,68 @@ export default function TaskSheet() {
         onKeyDown={handleTableKeyDown}
       >
         <table className="w-full border-collapse text-xs select-none">
-          <thead className="sticky top-0 z-10 bg-[#f2f2f2]">
+          <thead className="sticky top-0 z-10">
             <tr>
-              {/* Drag handle column */}
-              {canEdit && <th className="w-4 border-b border-r border-gray-300 bg-[#f2f2f2]" />}
-              {/* Row number */}
-              <th className="w-9 border-b border-r border-gray-300 text-center py-2 text-xs text-gray-400 font-normal bg-[#f2f2f2]" />
-              <th className="text-left px-2 py-2 font-semibold text-gray-600 border-b border-r border-gray-300 min-w-[200px]">タスク名</th>
-              <th className="text-left px-2 py-2 font-semibold text-gray-600 border-b border-r border-gray-300 w-28">フェーズ</th>
-              <th className="text-left px-2 py-2 font-semibold text-gray-600 border-b border-r border-gray-300 w-[110px]">開始日</th>
-              <th className="text-left px-2 py-2 font-semibold text-gray-600 border-b border-r border-gray-300 w-[110px]">終了日</th>
-              <th className="text-left px-2 py-2 font-semibold text-gray-600 border-b border-r border-gray-300 w-[140px]">進捗率</th>
-              <th className="text-left px-2 py-2 font-semibold text-gray-600 border-b border-gray-300 w-[110px]">更新日</th>
+              {canEdit && <th style={{ ...thStyle, width: 20 }} />}
+              <th style={{ ...thStyle, width: 36, textAlign: 'center' }}>#</th>
+              <th style={{ ...thStyle, minWidth: 200, textAlign: 'left' }}>タスク名</th>
+              <th style={{ ...thStyle, width: 110, textAlign: 'left' }}>フェーズ</th>
+              <th style={{ ...thStyle, width: 110, textAlign: 'left' }}>開始日</th>
+              <th style={{ ...thStyle, width: 110, textAlign: 'left' }}>終了日</th>
+              <th style={{ ...thStyle, width: 150, textAlign: 'left' }}>進捗率</th>
+              <th style={{ ...thStyle, width: 110, textAlign: 'left', borderRight: 'none' }}>更新日</th>
             </tr>
           </thead>
           <tbody>
-            {/* ── Existing tasks ── */}
             {tasks.map((task, idx) => {
               const isSelected = selectedIds.has(task.id)
               const isDragTarget = dropTarget?.id === task.id
               const isDraggingThis = dragIdRef.current === task.id
 
+              const rowStyle: React.CSSProperties = {
+                background: isSelected ? '#EEF2FF' : editing?.rowId === task.id ? '#FAFBFF' : 'transparent',
+                borderBottom: '1px solid #F1F5F9',
+                opacity: isDraggingThis ? 0.5 : 1,
+                outline: isDragTarget && dropTarget?.pos === 'above' ? '2px solid #6366F1' : undefined,
+                outlineOffset: isDragTarget && dropTarget?.pos === 'above' ? '-1px' : undefined,
+              }
+
+              const tdStyle: React.CSSProperties = {
+                borderRight: '1px solid #F1F5F9',
+                padding: 0,
+              }
+
               return (
                 <tr
                   key={task.id}
-                  className={`border-b border-gray-200 group ${
-                    isSelected
-                      ? 'bg-[#e8f0fe]'
-                      : editing?.rowId === task.id
-                      ? 'bg-white'
-                      : 'hover:bg-[#e8f0fe]/30'
-                  } ${isDragTarget && dropTarget?.pos === 'above' ? 'border-t-2 border-t-blue-500' : ''}
-                  ${isDragTarget && dropTarget?.pos === 'below' ? 'border-b-2 border-b-blue-500' : ''}
-                  ${isDraggingThis ? 'opacity-50' : ''}`}
+                  style={rowStyle}
                   onClick={(e) => handleRowClick(e, task.id)}
+                  onMouseEnter={(e) => { if (!isSelected && editing?.rowId !== task.id) e.currentTarget.style.background = '#FAFBFF' }}
+                  onMouseLeave={(e) => { if (!isSelected && editing?.rowId !== task.id) e.currentTarget.style.background = 'transparent' }}
                   onDragOver={(e) => handleDragOver(e, task.id)}
                   onDrop={(e) => handleDrop(e, task.id)}
+                  className="group"
                 >
-                  {/* Drag handle */}
                   {canEdit && (
                     <td
-                      className="border-r border-gray-200 w-4 text-center select-none"
+                      style={{ ...tdStyle, width: 20, textAlign: 'center' }}
                       draggable={true}
                       onDragStart={(e) => handleDragStart(e, task.id)}
                       onDragEnd={handleDragEnd}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-grab active:cursor-grabbing">
-                        <GripVertical className="w-3 h-3 text-gray-400" />
+                      <div
+                        className="opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-grab active:cursor-grabbing h-full py-2"
+                        style={{ transition: 'opacity 150ms' }}
+                      >
+                        <GripVertical className="w-3 h-3" style={{ color: '#CBD5E1' }} />
                       </div>
                     </td>
                   )}
-                  {/* Row number */}
-                  <td className="border-r border-gray-200 text-center text-xs text-gray-400 py-2 bg-[#f8f8f8] w-9 select-none">
-                    {idx + 1}
+                  <td style={{ ...tdStyle, width: 36, textAlign: 'center', background: '#FAFBFF' }}>
+                    <div className="py-2 text-xs tabular-nums" style={{ color: '#94A3B8' }}>{idx + 1}</div>
                   </td>
-                  {/* タスク名 */}
-                  <td className="border-r border-gray-200 p-0">
+                  <td style={tdStyle}>
                     <EditableNameCell
                       value={task.name}
                       isEditing={editing?.rowId === task.id && editing.field === 'name'}
@@ -682,39 +716,38 @@ export default function TaskSheet() {
                       initialChar={editing?.rowId === task.id && editing.field === 'name' ? editingInitialChar : null}
                     />
                   </td>
-                  {/* フェーズ */}
-                  <td className="border-r border-gray-200 p-0">
+                  <td style={tdStyle}>
                     {(() => {
                       const phase = task.phase_id ? phases.find(p => p.id === task.phase_id) : undefined
                       if (phase) {
                         return (
-                          <div className="px-2 py-2 min-h-[34px] flex items-center gap-1">
-                            <span style={{ color: phase.color ?? '#6366f1' }} className="text-xs leading-none">●</span>
-                            <span className="text-gray-600 text-xs truncate">{phase.name}</span>
+                          <div className="px-3 py-2 min-h-[34px] flex items-center gap-1.5">
+                            <span
+                              className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: phase.color ?? '#6366F1' }}
+                            />
+                            <span className="text-xs truncate" style={{ color: '#64748B' }}>{phase.name}</span>
                           </div>
                         )
                       }
-                      return <div className="px-2 py-2 min-h-[34px]" />
+                      return <div className="px-3 py-2 min-h-[34px]" />
                     })()}
                   </td>
-                  {/* 開始日 */}
-                  <td className="border-r border-gray-200 p-0" onClick={(e) => e.stopPropagation()}>
+                  <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
                     <DateCell
                       value={task.start_date}
                       canEdit={canEdit}
                       onOpen={(rect) => setDatePicker({ taskId: task.id, field: 'start_date', rect })}
                     />
                   </td>
-                  {/* 終了日 */}
-                  <td className="border-r border-gray-200 p-0" onClick={(e) => e.stopPropagation()}>
+                  <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
                     <DateCell
                       value={task.end_date}
                       canEdit={canEdit}
                       onOpen={(rect) => setDatePicker({ taskId: task.id, field: 'end_date', rect })}
                     />
                   </td>
-                  {/* 進捗率 */}
-                  <td className="border-r border-gray-200 p-0" onClick={(e) => e.stopPropagation()}>
+                  <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
                     <ProgressCell
                       value={task.progress ?? 0}
                       isEditing={editing?.rowId === task.id && editing.field === 'progress'}
@@ -724,9 +757,8 @@ export default function TaskSheet() {
                       inputRef={{ current: null } as React.RefObject<HTMLInputElement | null>}
                     />
                   </td>
-                  {/* 更新日 */}
-                  <td className="p-0">
-                    <div className="px-2 py-2 text-xs text-gray-400 min-h-[34px] flex items-center">
+                  <td style={{ ...tdStyle, borderRight: 'none' }}>
+                    <div className="px-3 py-2 text-xs min-h-[34px] flex items-center" style={{ color: '#CBD5E1' }}>
                       {fmtDate(task.updated_at)}
                     </div>
                   </td>
@@ -734,9 +766,9 @@ export default function TaskSheet() {
               )
             })}
 
-            {/* Drop zone for empty area after tasks */}
+            {/* Drop zone */}
             <tr
-              className="h-8"
+              style={{ height: 32 }}
               onDragOver={(e) => { e.preventDefault(); setDropTarget(null) }}
               onDrop={(e) => handleDrop(e, null)}
             >
@@ -745,23 +777,30 @@ export default function TaskSheet() {
               <td colSpan={6} />
             </tr>
 
-            {/* ── Empty rows (Excel-like) ── */}
+            {/* Empty rows */}
             {emptyRows.map((rowIndex) => {
               const emptyRowId = `empty-${rowIndex}`
               const isPending = pendingRows[rowIndex] !== undefined
+
               return (
                 <tr
                   key={emptyRowId}
-                  className="border-b border-gray-200 hover:bg-[#e8f0fe]/20"
+                  style={{ borderBottom: '1px solid #F8FAFC' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#FAFBFF' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                 >
-                  {/* No drag handle for empty rows */}
-                  {canEdit && <td className="border-r border-gray-200 w-4" />}
-                  {/* Row number */}
-                  <td className="border-r border-gray-200 text-center text-xs text-gray-400 py-2 bg-[#f8f8f8] w-9 select-none">
-                    {rowIndex + 1}
+                  {canEdit && <td style={{ borderRight: '1px solid #F1F5F9', width: 20 }} />}
+                  <td
+                    style={{
+                      borderRight: '1px solid #F1F5F9',
+                      width: 36,
+                      textAlign: 'center',
+                      background: '#FAFBFF',
+                    }}
+                  >
+                    <div className="py-2 text-xs tabular-nums" style={{ color: '#E2E8F0' }}>{rowIndex + 1}</div>
                   </td>
-                  {/* タスク名（入力可）*/}
-                  <td className="border-r border-gray-200 p-0" colSpan={1}>
+                  <td style={{ borderRight: '1px solid #F1F5F9', padding: 0 }}>
                     {canEdit ? (
                       <input
                         ref={getRef(emptyRowId, 'name')}
@@ -792,19 +831,24 @@ export default function TaskSheet() {
                             target.blur()
                           }
                         }}
-                        className={`w-full px-2 py-2 text-xs text-gray-900 border-0 outline-none bg-transparent focus:bg-blue-50 min-h-[34px] ${isPending ? 'bg-blue-50' : ''}`}
-                        placeholder=""
+                        className="w-full px-3 py-2 text-xs border-0 outline-none min-h-[34px]"
+                        style={{
+                          background: isPending ? '#EEF2FF' : 'transparent',
+                          color: '#0F172A',
+                          transition: 'background 150ms',
+                        }}
+                        onFocus={(e) => { e.currentTarget.style.background = '#EEF2FF' }}
+                        onBlurCapture={(e) => { if (!e.target.value) e.currentTarget.style.background = 'transparent' }}
                       />
                     ) : (
-                      <div className="px-2 py-2 min-h-[34px]" />
+                      <div className="px-3 py-2 min-h-[34px]" />
                     )}
                   </td>
-                  {/* 残列は空 */}
-                  <td className="border-r border-gray-200 min-h-[34px]" />
-                  <td className="border-r border-gray-200 min-h-[34px]" />
-                  <td className="border-r border-gray-200 min-h-[34px]" />
-                  <td className="border-r border-gray-200 min-h-[34px]" />
-                  <td className="min-h-[34px]" />
+                  <td style={{ borderRight: '1px solid #F1F5F9', minHeight: 34 }} />
+                  <td style={{ borderRight: '1px solid #F1F5F9', minHeight: 34 }} />
+                  <td style={{ borderRight: '1px solid #F1F5F9', minHeight: 34 }} />
+                  <td style={{ borderRight: '1px solid #F1F5F9', minHeight: 34 }} />
+                  <td style={{ minHeight: 34 }} />
                 </tr>
               )
             })}
@@ -819,7 +863,6 @@ export default function TaskSheet() {
         />
       )}
 
-      {/* Date picker popup */}
       {datePicker && (
         <DatePickerPopup
           value={

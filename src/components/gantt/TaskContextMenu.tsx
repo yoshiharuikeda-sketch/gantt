@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Send, Pencil, Trash2 } from 'lucide-react'
+import { Send, Trash2 } from 'lucide-react'
 import type { Task } from '@/types'
 import { useTaskStore } from '@/store/taskStore'
 import { useProjectStore } from '@/store/projectStore'
@@ -16,7 +16,7 @@ interface TaskContextMenuProps {
 
 export default function TaskContextMenu({ task, x, y, onClose }: TaskContextMenuProps) {
   const { removeTask } = useTaskStore()
-  const { currentUserRole, currentProject } = useProjectStore()
+  const { currentUserRole } = useProjectStore()
   const menuRef = useRef<HTMLDivElement>(null)
   const [showRequestModal, setShowRequestModal] = useState(false)
 
@@ -36,14 +36,10 @@ export default function TaskContextMenu({ task, x, y, onClose }: TaskContextMenu
   const handleDelete = async () => {
     if (!confirm(`「${task.name}」を削除しますか？`)) return
     onClose()
-
     const res = await fetch(`/api/tasks?id=${task.id}`, { method: 'DELETE' })
-    if (res.ok) {
-      removeTask(task.id)
-    }
+    if (res.ok) removeTask(task.id)
   }
 
-  // Adjust position to stay in viewport
   const adjustedX = Math.min(x, window.innerWidth - 200)
   const adjustedY = Math.min(y, window.innerHeight - 150)
 
@@ -51,32 +47,53 @@ export default function TaskContextMenu({ task, x, y, onClose }: TaskContextMenu
     <>
       <div
         ref={menuRef}
-        className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-48"
-        style={{ left: adjustedX, top: adjustedY }}
+        className="fixed z-50 rounded-xl py-1.5 w-48 animate-fade-in"
+        style={{
+          left: adjustedX,
+          top: adjustedY,
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 8px 24px rgba(15,23,42,0.12), 0 2px 8px rgba(15,23,42,0.06)',
+        }}
       >
+        {/* Task name header */}
+        <div className="px-3 py-2 mb-1" style={{ borderBottom: '1px solid #F1F5F9' }}>
+          <p className="text-xs font-semibold truncate" style={{ color: '#0F172A' }}>{task.name}</p>
+        </div>
+
         {canRequest && (
           <button
             onClick={() => setShowRequestModal(true)}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium transition-colors"
+            style={{ color: '#6366F1' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#EEF2FF' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
-            <Send className="w-4 h-4" />
-            更新依頼
+            <Send className="w-3.5 h-3.5" />
+            更新依頼を送る
           </button>
         )}
+
         {canEdit && (
           <>
-            {canRequest && <div className="mx-3 my-1 border-t border-gray-100" />}
+            {canRequest && (
+              <div style={{ margin: '4px 12px', height: 1, background: '#F1F5F9' }} />
+            )}
             <button
               onClick={handleDelete}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium transition-colors"
+              style={{ color: '#EF4444' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.05)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3.5 h-3.5" />
               削除
             </button>
           </>
         )}
+
         {!canEdit && !canRequest && (
-          <div className="px-3 py-2 text-xs text-gray-400">操作できません</div>
+          <div className="px-3 py-2 text-xs" style={{ color: '#94A3B8' }}>操作できません</div>
         )}
       </div>
 
